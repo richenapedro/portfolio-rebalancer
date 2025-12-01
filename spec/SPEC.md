@@ -1,4 +1,3 @@
-
 # Resumo
 
 ## SaaS multi-tenant onde cada empresa (Org) faz upload de dados (CSV/API), treina um modelo de Churn (ou Lead Scoring) e vê:
@@ -11,20 +10,22 @@
 
 ## Camada MVP (primeira entrega)
 
-- **Front:** Next.js + TypeScript + Tailwind  
-- **API:** FastAPI + Pydantic  
-- **DB:** Postgres + SQLAlchemy + Alembic  
-- **Jobs:** Celery + Redis (só quando entrar treino assíncrono)  
-- **ML:** scikit-learn (primeiro) + (depois XGBoost/LightGBM)  
-- **Dev:** Docker Compose + GitHub Actions (lint/test)  
+- **Front:** Next.js + TypeScript + Tailwind
+- **API:** FastAPI + Pydantic
+- **DB:** Postgres + SQLAlchemy + Alembic
+- **Jobs:** Celery + Redis (só quando entrar treino assíncrono)
+- **ML:** scikit-learn (primeiro) + (depois XGBoost/LightGBM)
+- **Dev:** Docker Compose + GitHub Actions (lint/test)
 
 ---
 
 ## Entidades essenciais do projeto:
 
 ### 1) **User (Usuário)**
+
 Quem acessa o sistema.  
-**Campos típicos:**  
+**Campos típicos:**
+
 - `id`
 - `name`
 - `email`
@@ -34,8 +35,10 @@ Quem acessa o sistema.
 ---
 
 ### 2) **Organization / Tenant (Empresa)**
+
 A “conta” da empresa dentro do SaaS (multi-tenant).  
-**Campos:**  
+**Campos:**
+
 - `id`
 - `name`
 - `created_at`
@@ -43,8 +46,10 @@ A “conta” da empresa dentro do SaaS (multi-tenant).
 ---
 
 ### 3) **Membership (Vínculo usuário↔empresa)**
+
 Liga **User** a **Organization** e define papel (admin/member).  
-**Campos:**  
+**Campos:**
+
 - `user_id`
 - `org_id`
 - `role`
@@ -52,8 +57,10 @@ Liga **User** a **Organization** e define papel (admin/member).
 ---
 
 ### 4) **Dataset (Conjunto de dados)**
+
 Um upload/ingestão de dados que será usado para treino e scoring.  
-**Campos:**  
+**Campos:**
+
 - `id`
 - `org_id`
 - `name`
@@ -65,8 +72,10 @@ Um upload/ingestão de dados que será usado para treino e scoring.
 ---
 
 ### 5) **TrainingRun / Job (Execução de treino)**
+
 Um registro de “tarefa rodando” (treino batch, etc.).  
-**Campos:**  
+**Campos:**
+
 - `id`
 - `org_id`
 - `dataset_id`
@@ -78,8 +87,10 @@ Um registro de “tarefa rodando” (treino batch, etc.).
 ---
 
 ### 6) **ModelVersion (Versão do modelo)**
+
 O resultado de um treino: “modelo v1, v2…”, com métricas.  
-**Campos:**  
+**Campos:**
+
 - `id`
 - `org_id`
 - `training_run_id`
@@ -91,8 +102,10 @@ O resultado de um treino: “modelo v1, v2…”, com métricas.
 ---
 
 ### 7) **Prediction (Predição/Score)**
+
 Os resultados gerados (por linha do dataset, ou por `customer_id`).  
-**Campos:**  
+**Campos:**
+
 - `id`
 - `org_id`
 - `dataset_id`
@@ -104,6 +117,7 @@ Os resultados gerados (por linha do dataset, ou por `customer_id`).
 ---
 
 > **Dica:** Comece com apenas **4 entidades no MVP**:
+
 - `User`
 - `Organization`
 - `Dataset`
