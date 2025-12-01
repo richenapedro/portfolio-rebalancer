@@ -9,8 +9,6 @@ jobs:
   repo-checks:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
       - name: Prettier check (md/yml)
         run: npx --yes prettier --check "**/*.{md,yml,yaml}"
