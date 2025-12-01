@@ -18,17 +18,17 @@
 ---
 
 ## Setup do repositório (GitHub “de empresa”)
-- [ ] Criar repo no GitHub e dar push do main
-- [ ] Ativar Branch protection do main:
-  - [ ] Exigir PR para merge
+- [X] Criar repo no GitHub e dar push do main
+- [X] Ativar Branch protection do main:
+  - [X] Exigir PR para merge
   - [ ] Exigir status checks (CI) passarem
-  - [ ] Bloquear force-push
-- [ ] Adicionar templates:
-  - [ ] .github/PULL_REQUEST_TEMPLATE.md
-  - [ ] .github/ISSUE_TEMPLATE/bug.yml e feature.yml (mínimo)
-- [ ] Adicionar .github/CODEOWNERS (mesmo que seja você)
-- [ ] Adicionar LICENSE + SECURITY.md (mínimo) + CODE_OF_CONDUCT.md (opcional)
-- [ ] Adicionar .editorconfig, .gitattributes, .gitignore (Python + Node)
+  - [X] Bloquear force-push
+- [X] Adicionar templates:
+  - [X] .github/PULL_REQUEST_TEMPLATE.md
+  - [X] .github/ISSUE_TEMPLATE/bug.yml e feature.yml (mínimo)
+- [X] Adicionar .github/CODEOWNERS (mesmo que seja você)
+- [X] Adicionar LICENSE + SECURITY.md (mínimo) + CODE_OF_CONDUCT.md (opcional)
+- [X] Adicionar .editorconfig, .gitattributes, .gitignore (Python + Node)
 
 ---
 
