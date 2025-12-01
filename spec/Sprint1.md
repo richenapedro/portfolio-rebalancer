@@ -10,10 +10,10 @@
 
 ## Padrões de versionamento (antes de codar)
 - [X] Definir estratégia trunk-based: main protegido + branches curtas + PR obrigatório
-- [ ] Definir padrão de branch: feat/..., fix/..., chore/..., docs/...
-- [ ] Definir padrão de commits: Conventional Commits (feat:, fix:, chore:, docs:)
-- [ ] Criar CONTRIBUTING.md com: branch naming, commits, PR checklist, como rodar/testar local
-- [ ] Criar CHANGELOG.md (com seção Unreleased) + usar tags depois (ex. v0.1.0)
+- [X] Definir padrão de branch: feat/..., fix/..., chore/..., docs/...
+- [X] Definir padrão de commits: Conventional Commits (feat:, fix:, chore:, docs:)
+- [X] Criar CONTRIBUTING.md com: branch naming, commits, PR checklist, como rodar/testar local
+- [X] Criar CHANGELOG.md (com seção Unreleased) + usar tags depois (ex. v0.1.0)
 
 ---
 
