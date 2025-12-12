@@ -1,6 +1,7 @@
 # Sprint 1 — Foundation Setup
 
 ## Goal
+
 Set up the core structure of the project as a professional Python package,
 including tests and CI.
 
@@ -9,6 +10,7 @@ including tests and CI.
 ## Tasks
 
 ### 1. Repository Initialization
+
 - [ ] Create `src/saas_churn/` base package
 - [ ] Create empty module files:
   - `config.py`
@@ -21,6 +23,7 @@ including tests and CI.
 ---
 
 ### 2. Project Tooling
+
 - [ ] Create `pyproject.toml` with:
   - dependencies
   - black
@@ -32,6 +35,7 @@ including tests and CI.
 ---
 
 ### 3. Continuous Integration
+
 - [ ] Create `.github/workflows/ci.yml` to run:
   - `pip install .`
   - lint (ruff)
@@ -41,6 +45,7 @@ including tests and CI.
 ---
 
 ### 4. Basic Implementations
+
 - [ ] `config.py`: load paths/env variables
 - [ ] `io.py`: simple CSV read/write wrappers
 - [ ] `transform.py`: basic cleaning + feature creation
@@ -50,6 +55,7 @@ including tests and CI.
 ---
 
 ### 5. Unit Tests
+
 - [ ] Create `tests/` folder
 - [ ] Add tests for:
   - config
@@ -61,6 +67,7 @@ including tests and CI.
 ---
 
 ## Acceptance Criteria
+
 - CI must pass (lint + tests)
 - Pipeline must run end-to-end on example dataset
 - Repo must be readable and professional

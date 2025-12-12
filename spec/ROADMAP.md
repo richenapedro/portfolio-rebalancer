@@ -6,6 +6,7 @@ to a more complete engineering showcase.
 ---
 
 ## Phase 1 — Foundation (MVP)
+
 **Goal:** basic package + CI + tests
 
 - [ ] Create package structure under `src/saas_churn/`
@@ -23,20 +24,22 @@ to a more complete engineering showcase.
 ---
 
 ## Phase 2 — CLI & Feature Expansion
+
 **Goal:** enable pipeline execution via command line
 
-- [ ] Create CLI using Typer or Click  
+- [ ] Create CLI using Typer or Click
 - [ ] Add commands:
   - `run-pipeline`
   - `prepare-data`
   - `predict-churn`
-- [ ] Improve logging & error handling  
-- [ ] Add config profiles (dev/prod)  
+- [ ] Improve logging & error handling
+- [ ] Add config profiles (dev/prod)
 - [ ] Increase test coverage
 
 ---
 
 ## Phase 3 — Model Upgrade (Optional)
+
 **Goal:** plug a real ML model, but keeping minimal complexity
 
 - [ ] Add logistic regression baseline
@@ -48,6 +51,7 @@ to a more complete engineering showcase.
 ---
 
 ## Phase 4 — Optional API Layer
+
 **Goal:** expose churn prediction via FastAPI (only if useful for portfolio)
 
 - [ ] Basic FastAPI project with one endpoint
@@ -58,6 +62,7 @@ to a more complete engineering showcase.
 ---
 
 ## Phase 5 — Packaging & Distribution
+
 - [ ] Add `pyproject.toml` metadata
 - [ ] Optional: publish to PyPI Test Repository
 - [ ] Optional: build Docker image
