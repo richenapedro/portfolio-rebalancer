@@ -1,124 +1,58 @@
-# Resumo
+# SaaS Data Pipeline — Python Engineering Project
 
-## SaaS multi-tenant onde cada empresa (Org) faz upload de dados (CSV/API), treina um modelo de Churn (ou Lead Scoring) e vê:
+## Overview
 
-- **Scores por cliente/lead**
-- **Métricas do modelo**
-- **Alertas** (ex.: “top 20 clientes com maior risco”)
+This repository simulates the internal data platform of a fictional SaaS company.
+The goal is not machine learning itself, but to demonstrate robust **Python
+engineering practices** for building a modular, testable and automated data pipeline.
 
----
+The system processes customer subscription data and produces:
 
-## Camada MVP (primeira entrega)
+- cleaned datasets
+- feature tables
+- churn risk scores (model is pluggable; simple baseline initially)
 
-- **Front:** Next.js + TypeScript + Tailwind
-- **API:** FastAPI + Pydantic
-- **DB:** Postgres + SQLAlchemy + Alembic
-- **Jobs:** Celery + Redis (só quando entrar treino assíncrono)
-- **ML:** scikit-learn (primeiro) + (depois XGBoost/LightGBM)
-- **Dev:** Docker Compose + GitHub Actions (lint/test)
+The project emphasizes:
 
----
+- well-structured Python package (`src/saas_churn/`)
+- configuration management via environment variables
+- data ingestion / transformation pipeline
+- modular model interface (swap models without breaking pipeline)
+- automated testing with `pytest`
+- linting, formatting and type checking
+- CI pipeline using GitHub Actions
+- optional CLI for pipeline execution
 
-## Entidades essenciais do projeto:
+## Architecture
 
-### 1) **User (Usuário)**
+src/saas_churn/
+│
+├── config.py # loads environment variables, paths, parameters
+├── io.py # data loading/saving abstraction
+├── transform.py # data cleaning / feature engineering
+├── model.py # simple model interface + baseline churn predictor
+├── pipeline.py # orchestrates end-to-end workflow
+└── cli.py # (later) command-line interface using Typer or Click
 
-Quem acessa o sistema.  
-**Campos típicos:**
+## Pipeline Flow
 
-- `id`
-- `name`
-- `email`
-- `password_hash`
-- `created_at`
+1. Load raw dataset
+2. Apply transformations
+3. Produce model-ready table
+4. Run churn scoring
+5. Export results
 
----
+All components must be individually testable.
 
-### 2) **Organization / Tenant (Empresa)**
+## Non-Goals
 
-A “conta” da empresa dentro do SaaS (multi-tenant).  
-**Campos:**
+- building a production ML system
+- complex infra (Kubernetes, Spark…)
+- microservices (API only if added later as optional module)
 
-- `id`
-- `name`
-- `created_at`
+## Deliverables
 
----
-
-### 3) **Membership (Vínculo usuário↔empresa)**
-
-Liga **User** a **Organization** e define papel (admin/member).  
-**Campos:**
-
-- `user_id`
-- `org_id`
-- `role`
-
----
-
-### 4) **Dataset (Conjunto de dados)**
-
-Um upload/ingestão de dados que será usado para treino e scoring.  
-**Campos:**
-
-- `id`
-- `org_id`
-- `name`
-- `file_path` (ou `url`)
-- `schema_json`
-- `status`
-- `created_at`
-
----
-
-### 5) **TrainingRun / Job (Execução de treino)**
-
-Um registro de “tarefa rodando” (treino batch, etc.).  
-**Campos:**
-
-- `id`
-- `org_id`
-- `dataset_id`
-- `status` (queued/running/success/failed)
-- `logs`
-- `started_at`
-- `ended_at`
-
----
-
-### 6) **ModelVersion (Versão do modelo)**
-
-O resultado de um treino: “modelo v1, v2…”, com métricas.  
-**Campos:**
-
-- `id`
-- `org_id`
-- `training_run_id`
-- `artifact_path`
-- `metrics_json`
-- `created_at`
-- `stage` (staging/prod)
-
----
-
-### 7) **Prediction (Predição/Score)**
-
-Os resultados gerados (por linha do dataset, ou por `customer_id`).  
-**Campos:**
-
-- `id`
-- `org_id`
-- `dataset_id`
-- `model_version_id`
-- `entity_key` (ex.: `customer_id`)
-- `score`
-- `created_at`
-
----
-
-> **Dica:** Comece com apenas **4 entidades no MVP**:
-
-- `User`
-- `Organization`
-- `Dataset`
-- `ModelVersion`
+- Clean package structure with documentation
+- Automated CI pipeline
+- Unit tests covering at least 80%
+- Example dataset + reproducible pipeline run

@@ -1,105 +1,73 @@
-# ✅ Sprint 1 — Checklist (Simulando empresa grande + GitHub)
+# Sprint 1 — Foundation Setup
 
-## Planejamento (GitHub)
+## Goal
 
-- [x] Criar Milestone “Sprint 1”
-- [x] Abrir Issues (1 por item grande: infra, auth, orgs, datasets, frontend auth, frontend datasets, CI)
-- [x] Definir labels mínimas: backend, frontend, infra, ci, docs, security
-
----
-
-## Padrões de versionamento (antes de codar)
-
-- [x] Definir estratégia trunk-based: main protegido + branches curtas + PR obrigatório
-- [x] Definir padrão de branch: feat/..., fix/..., chore/..., docs/...
-- [x] Definir padrão de commits: Conventional Commits (feat:, fix:, chore:, docs:)
-- [x] Criar CONTRIBUTING.md com: branch naming, commits, PR checklist, como rodar/testar local
-- [x] Criar CHANGELOG.md (com seção Unreleased) + usar tags depois (ex. v0.1.0)
+Set up the core structure of the project as a professional Python package,
+including tests and CI.
 
 ---
 
-## Setup do repositório (GitHub “de empresa”)
+## Tasks
 
-- [x] Criar repo no GitHub e dar push do main
-- [x] Ativar Branch protection do main:
-  - [x] Exigir PR para merge
-  - [ ] Exigir status checks (CI) passarem
-  - [x] Bloquear force-push
-- [x] Adicionar templates:
-  - [x] .github/PULL_REQUEST_TEMPLATE.md
-  - [x] .github/ISSUE_TEMPLATE/bug.yml e feature.yml (mínimo)
-- [x] Adicionar .github/CODEOWNERS (mesmo que seja você)
-- [x] Adicionar LICENSE + SECURITY.md (mínimo) + CODE_OF_CONDUCT.md (opcional)
-- [x] Adicionar .editorconfig, .gitattributes, .gitignore (Python + Node)
+### 1. Repository Initialization
 
----
-
-## Qualidade local (hooks)
-
-- [ ] Backend: configurar pre-commit (ex.: ruff + ruff-format ou black, check-yaml, end-of-file-fixer)
-- [ ] Frontend: configurar eslint + prettier
-- [ ] Padronizar comandos em Makefile ou taskfile:
-  - [ ] make lint, make test, make fmt, make up
+- [ ] Create `src/saas_churn/` base package
+- [ ] Create empty module files:
+  - `config.py`
+  - `io.py`
+  - `transform.py`
+  - `model.py`
+  - `pipeline.py`
+- [ ] Add example dataset to `data/raw/`
 
 ---
 
-## Infra local (Docker Compose)
+### 2. Project Tooling
 
-- [ ] Criar infra/docker-compose.yml com postgres + api (hot reload)
-- [ ] Criar .env.example e documentar variáveis no README.md
-- [ ] Garantir “subiu = funciona”: docker compose up sem erro
-
----
-
-## Backend (FastAPI + Postgres) — mínimo funcional
-
-- [ ] Configurar SQLAlchemy 2.0 + sessão + Alembic
-- [ ] Migration inicial com tabelas:
-  - [ ] users
-  - [ ] orgs
-  - [ ] memberships (role)
-  - [ ] datasets (metadata)
-- [ ] Criar GET /health
-- [ ] Auth:
-  - [ ] POST /auth/register
-  - [ ] POST /auth/login
-  - [ ] GET /me
-- [ ] Orgs:
-  - [ ] POST /orgs (cria org + membership admin)
-  - [ ] GET /orgs (lista orgs do usuário)
-- [ ] Datasets:
-  - [ ] POST /orgs/{org_id}/datasets/upload (salva arquivo local + metadata no DB)
-  - [ ] GET /orgs/{org_id}/datasets
-  - [ ] GET /orgs/{org_id}/datasets/{dataset_id}
+- [ ] Create `pyproject.toml` with:
+  - dependencies
+  - black
+  - ruff
+  - pytest config
+- [ ] Add `.env.example`
+- [ ] Add `.gitignore`
 
 ---
 
-## Frontend (Next.js) — mínimo funcional
+### 3. Continuous Integration
 
-- [ ] Setup Next.js + TS + Tailwind
-- [ ] Cliente HTTP com JWT (storage + header)
-- [ ] Páginas:
-  - [ ] /register
-  - [ ] /login
-  - [ ] /orgs (listar + criar org)
-  - [ ] /datasets (listar + upload; usa org ativa)
-- [ ] Guard de rota (sem token → login)
-- [ ] Persistir “org ativa” (localStorage)
+- [ ] Create `.github/workflows/ci.yml` to run:
+  - `pip install .`
+  - lint (ruff)
+  - formatting check (black)
+  - tests (pytest)
 
 ---
 
-## CI (GitHub Actions) + gates do main
+### 4. Basic Implementations
 
-- [ ] Workflow api-ci.yml: lint + typecheck (opcional) + tests
-- [ ] Workflow frontend-ci.yml: lint + build
-- [ ] Marcar esses workflows como required checks na proteção do main
+- [ ] `config.py`: load paths/env variables
+- [ ] `io.py`: simple CSV read/write wrappers
+- [ ] `transform.py`: basic cleaning + feature creation
+- [ ] `model.py`: dummy churn predictor (ex: rule-based or random)
+- [ ] `pipeline.py`: orchestrate load → transform → predict → export
 
 ---
 
-## “Modo empresa”: fluxo de PR (obrigatório no Sprint 1)
+### 5. Unit Tests
 
-- [ ] Para cada issue: criar branch → commits pequenos → PR → merge
-- [ ] Checklist do PR:
-  - [ ] descrição do que foi feito + como testar
-  - [ ] screenshots (front) quando aplicável
-  - [ ] CI verde
+- [ ] Create `tests/` folder
+- [ ] Add tests for:
+  - config
+  - io
+  - transform
+  - model
+  - pipeline (integration-style)
+
+---
+
+## Acceptance Criteria
+
+- CI must pass (lint + tests)
+- Pipeline must run end-to-end on example dataset
+- Repo must be readable and professional
