@@ -28,3 +28,7 @@ src = ["src", "tests"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+
+[project.scripts]
+portfolio-rebalancer = "portfolio_rebalancer.cli:main"
+
