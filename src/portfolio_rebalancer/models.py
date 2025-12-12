@@ -7,9 +7,11 @@ from typing import Literal
 Side = Literal["BUY", "SELL"]
 AssetType = Literal["STOCK", "FII", "BOND", "CASH"]
 
+
 @dataclass(frozen=True, slots=True)
 class Position:
     """Represents a current holding in the portfolio."""
+
     ticker: str
     asset_type: AssetType
     quantity: float
@@ -40,6 +42,7 @@ class Position:
 @dataclass(frozen=True, slots=True)
 class Trade:
     """Represents a suggested order to execute."""
+
     ticker: str
     side: Side
     quantity: float
@@ -72,6 +75,7 @@ class Trade:
 @dataclass(slots=True)
 class Portfolio:
     """Aggregate of positions + cash, with convenience methods."""
+
     positions: list[Position]
     cash: float = 0.0
 
