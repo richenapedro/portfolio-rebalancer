@@ -41,7 +41,7 @@ def main(argv: list[str] | None = None) -> int:
         )
 
         for t in res.trades:
-            print(f"{t.side},{t.ticker},{t.quantity},{t.price}")
+            print(f"{t.side},{t.ticker},{t.quantity},{t.price},{t.notional}")
         print(f"CASH_BEFORE,{res.cash_before}")
         print(f"CASH_AFTER,{res.cash_after}")
         return 0
