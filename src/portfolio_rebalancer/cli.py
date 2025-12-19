@@ -20,7 +20,9 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--mode", default="TRADE", choices=["BUY", "TRADE", "SELL"])
     r.add_argument("--fractional", action="store_true")
     r.add_argument("--min-notional", type=float, default=0.0)
-    r.add_argument("--show-post", action="store_true", help="Print post-trade portfolio snapshot")
+    r.add_argument(
+        "--show-post", action="store_true", help="Print post-trade portfolio snapshot"
+    )
 
     return p
 
@@ -47,7 +49,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{t.side},{t.ticker},{t.quantity},{t.price},{t.notional}")
         print(f"CASH_BEFORE,{res.cash_before}")
         print(f"CASH_AFTER,{res.cash_after}")
-        
+
         if args.show_post:
             asset_type_by_ticker = {p.ticker: p.asset_type for p in positions}
 
@@ -68,7 +70,6 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"POST_POSITION,{p.ticker},{p.asset_type},{p.quantity},{px},{mv}")
 
             print(f"POST_TOTAL_VALUE,{total_positions_value + float(post_pf.cash)}")
-
 
         return 0
 
