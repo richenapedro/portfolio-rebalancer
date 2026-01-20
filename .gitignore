@@ -212,6 +212,6 @@ __marimo__/
 # test fixtures
 tests/fixtures/
 
-# outputs
+# Output
 out/
 
