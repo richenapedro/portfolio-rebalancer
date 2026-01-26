@@ -5,7 +5,7 @@ from pathlib import Path
 
 from .models import Portfolio
 from .rebalance import rebalance
-from .loaders import load_positions_csv, load_prices_csv, load_targets_csv
+from .loaders import load_positions_csv, load_prices_for_positions, load_targets_csv
 from .execution import apply_trades
 
 
@@ -63,7 +63,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "rebalance":
         positions = load_positions_csv(args.positions)
-        prices = load_prices_csv(args.prices)
+        prices = load_prices_for_positions(positions, args.prices)  # <- troca aqui
         target = load_targets_csv(args.targets)
 
         pf = Portfolio(positions=positions, cash=float(args.cash))
