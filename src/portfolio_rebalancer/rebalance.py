@@ -46,11 +46,25 @@ def rebalance(
     }
 
     qty_by_ticker = {p.ticker: float(p.quantity) for p in portfolio.positions}
+    pos_by_ticker = {p.ticker.strip().upper(): p for p in portfolio.positions}
 
     def _need_price(ticker: str) -> float:
-        if ticker not in prices:
-            raise ValueError(f"missing price for ticker: {ticker}")
-        px = float(prices[ticker])
+        key = ticker.strip().upper()
+
+        # 1) tenta achar no prices (do jeito que veio)
+        if ticker in prices:
+            px = float(prices[ticker])
+        # 2) tenta achar normalizado
+        elif key in prices:
+            px = float(prices[key])
+        else:
+            # 3) fallback: se for BOND, usa o preço do positions
+            p = pos_by_ticker.get(key)
+            if p is not None and p.asset_type == "BOND":
+                px = float(p.price)
+            else:
+                raise ValueError(f"missing price for ticker: {ticker}")
+
         if px <= 0:
             raise ValueError(f"price must be > 0 for ticker: {ticker}")
         return px
