@@ -39,18 +39,26 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "import-b3":
         from .importers.b3_xlsx import import_b3_xlsx
-        from .importers.csv_export import write_positions_csv, write_prices_csv
+        from .importers.csv_export import (
+            build_default_targets,
+            write_positions_csv,
+            write_prices_csv,
+            write_targets_csv,
+        )
 
         res = import_b3_xlsx(
             Path(args.input),
             user_id=str(args.user_id),
             include_tesouro=not bool(args.no_tesouro),
         )
-
         out_dir = Path(args.out)
         pos_path = write_positions_csv(res, out_dir / "positions.csv")
         prices_path = write_prices_csv(res, out_dir / "prices.csv")
 
+        target = build_default_targets(res.positions)
+        targets_path = write_targets_csv(target, out_dir / "targets.csv")
+
+        print(f"OK: wrote {targets_path}")
         print(f"OK: wrote {pos_path}")
         print(f"OK: wrote {prices_path}")
 
@@ -63,7 +71,15 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "rebalance":
         positions = load_positions_csv(args.positions)
-        prices = load_prices_for_positions(positions, args.prices)  # <- troca aqui
+
+        fallback_prices = Path(args.positions).with_name("prices.csv")  # out\prices.csv
+        print("Using fallback prices from:", fallback_prices)
+        prices = load_prices_for_positions(
+            positions,
+            args.prices,  # URL do sheets (ou path)
+            fallback_csv=fallback_prices,  # fallback automático
+        )
+
         target = load_targets_csv(args.targets)
 
         pf = Portfolio(positions=positions, cash=float(args.cash))
