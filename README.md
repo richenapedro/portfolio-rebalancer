@@ -37,3 +37,8 @@ docker compose exec api alembic upgrade head
 # Docs: http://localhost:8000/docs
 # Web: http://localhost:3000
 ```
+
+
+### Prices CSV (Google Sheets)
+Use a published CSV URL (`.../export?format=csv&gid=...`). Price resolution per ticker:
+1) `price` (if present) → 2) `previous_close` → 3) fallback to `positions.csv` `price`.
