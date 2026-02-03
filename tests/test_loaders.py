@@ -12,7 +12,7 @@ from portfolio_rebalancer.loaders import (
 def test_load_positions_csv(tmp_path: Path):
     p = tmp_path / "positions.csv"
     p.write_text(
-        "ticker,asset_type,quantity,price\n" "aapl,stock,2,150\n",
+        "ticker,asset_type,quantity,price\naapl,stock,2,150\n",
         encoding="utf-8",
     )
     positions = load_positions_csv(p)
@@ -26,7 +26,7 @@ def test_load_positions_csv(tmp_path: Path):
 def test_load_prices_csv(tmp_path: Path):
     p = tmp_path / "prices.csv"
     p.write_text(
-        "ticker,price\n" "aapl,155\n",
+        "ticker,price\naapl,155\n",
         encoding="utf-8",
     )
     prices = load_prices_csv(p)
@@ -36,7 +36,7 @@ def test_load_prices_csv(tmp_path: Path):
 def test_load_targets_csv(tmp_path: Path):
     p = tmp_path / "targets.csv"
     p.write_text(
-        "ticker,weight\n" "aapl,0.6\n" "msft,0.4\n",
+        "ticker,weight\naapl,0.6\nmsft,0.4\n",
         encoding="utf-8",
     )
     target = load_targets_csv(p)

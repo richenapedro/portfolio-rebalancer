@@ -9,15 +9,15 @@ def test_cli_rebalance_show_post(tmp_path: Path, capsys):
     prices = tmp_path / "prices.csv"
 
     positions.write_text(
-        "ticker,asset_type,quantity,price\n" "AAA,STOCK,10,100\n" "BBB,STOCK,5,200\n",
+        "ticker,asset_type,quantity,price\nAAA,STOCK,10,100\nBBB,STOCK,5,200\n",
         encoding="utf-8",
     )
     targets.write_text(
-        "ticker,weight\n" "AAA,0.75\n" "BBB,0.25\n",
+        "ticker,weight\nAAA,0.75\nBBB,0.25\n",
         encoding="utf-8",
     )
     prices.write_text(
-        "ticker,price\n" "AAA,100\n" "BBB,200\n",
+        "ticker,price\nAAA,100\nBBB,200\n",
         encoding="utf-8",
     )
 
@@ -52,15 +52,15 @@ def test_cli_rebalance_smoke(tmp_path: Path, capsys):
     prices = tmp_path / "prices.csv"
 
     positions.write_text(
-        "ticker,asset_type,quantity,price\n" "AAA,STOCK,10,100\n" "BBB,STOCK,5,200\n",
+        "ticker,asset_type,quantity,price\nAAA,STOCK,10,100\nBBB,STOCK,5,200\n",
         encoding="utf-8",
     )
     targets.write_text(
-        "ticker,weight\n" "AAA,0.75\n" "BBB,0.25\n",
+        "ticker,weight\nAAA,0.75\nBBB,0.25\n",
         encoding="utf-8",
     )
     prices.write_text(
-        "ticker,price\n" "AAA,100\n" "BBB,200\n",
+        "ticker,price\nAAA,100\nBBB,200\n",
         encoding="utf-8",
     )
 
