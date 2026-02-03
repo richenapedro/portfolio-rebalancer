@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-
+import pytest
 from fastapi.testclient import TestClient
 
 from portfolio_rebalancer.api.app import app
@@ -44,6 +44,9 @@ def test_import_b3_endpoint_smoke() -> None:
     client = TestClient(app)
 
     xlsx = Path(__file__).parent / "fixtures" / "posicao-2026-01-12-13-32-18.xlsx"
+    if not xlsx.exists():
+        pytest.skip("missing fixture XLSX in repository")
+
     with xlsx.open("rb") as f:
         files = {
             "file": (
