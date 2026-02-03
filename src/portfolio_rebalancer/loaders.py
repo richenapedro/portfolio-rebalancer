@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+from dataclasses import replace
 from pathlib import Path
 from urllib.request import urlopen
 
@@ -23,41 +24,70 @@ def _to_float(s: str) -> float:
     return float(v)
 
 
-def load_positions_csv(path: PathLike) -> list[Position]:
+def load_positions_csv(path: str | Path) -> list[Position]:
+    """
+    Load positions.csv.
+    - Aggregates duplicate tickers by summing quantity.
+    - Validates asset_type consistency across duplicates.
+    - Keeps last 'price' encountered for a ticker (price is mainly used as fallback).
+    """
     p = Path(path)
+
+    rows: dict[str, Position] = {}
+    dupes: set[str] = set()
+
     with p.open(newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         required = {"ticker", "asset_type", "quantity", "price"}
         if not reader.fieldnames or not required.issubset(set(reader.fieldnames)):
             raise ValueError(f"positions csv must have columns: {sorted(required)}")
 
-        out: list[Position] = []
-        for row in reader:
-            ticker = (row.get("ticker") or "").strip().upper()
-            asset_type = (row.get("asset_type") or "").strip().upper()
-
+        for r in reader:
+            ticker = (r.get("ticker") or "").strip().upper()
             if not ticker:
-                raise ValueError("positions csv: empty ticker")
+                continue
 
-            try:
-                qty = _to_float(row.get("quantity") or "")
-            except ValueError as e:
-                raise ValueError(f"positions csv: invalid quantity for {ticker}") from e
+            asset_type = (r.get("asset_type") or "").strip()
+            if not asset_type:
+                raise ValueError(f"empty asset_type for ticker: {ticker}")
 
-            try:
-                price = _to_float(row.get("price") or "")
-            except ValueError as e:
-                raise ValueError(f"positions csv: invalid price for {ticker}") from e
+            quantity = _to_float(r.get("quantity") or "")
+            price = _to_float(r.get("price") or "")
 
-            out.append(
-                Position(
-                    ticker=ticker,
-                    asset_type=asset_type,
-                    quantity=float(qty),
-                    price=float(price),
-                )
+            new_pos = Position(
+                ticker=ticker,
+                asset_type=asset_type,
+                quantity=float(quantity),
+                price=float(price),
             )
-        return out
+
+            cur = rows.get(ticker)
+            if cur is None:
+                rows[ticker] = new_pos
+                continue
+
+            # duplicata: agrega quantidade (Position é frozen => replace)
+            dupes.add(ticker)
+
+            if cur.asset_type != new_pos.asset_type:
+                raise ValueError(
+                    f"duplicate ticker with different asset_type: {ticker} "
+                    f"({cur.asset_type} vs {new_pos.asset_type})"
+                )
+
+            rows[ticker] = replace(
+                cur,
+                quantity=float(cur.quantity) + float(new_pos.quantity),
+                price=float(new_pos.price),  # regra: mantém último preço do CSV
+            )
+
+    if dupes:
+        print(
+            "WARNING,duplicate tickers aggregated in positions.csv: "
+            + ", ".join(sorted(dupes))
+        )
+
+    return list(rows.values())
 
 
 def _normalize_source(source: str) -> str:
@@ -176,6 +206,6 @@ def load_targets_csv(path: PathLike) -> TargetAllocation:
             t = (row.get("ticker") or "").strip().upper()
             if not t:
                 continue
-            weights[t] = float(row.get("weight") or 0.0)
+            weights[t] = _to_float(row.get("weight") or "0")
 
         return TargetAllocation(weights)
