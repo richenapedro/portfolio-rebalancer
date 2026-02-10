@@ -3,7 +3,8 @@ from __future__ import annotations
 import tempfile
 from typing import Any
 
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, Request, UploadFile
+
 from fastapi.middleware.cors import CORSMiddleware
 
 from portfolio_rebalancer.execution import apply_trades
@@ -14,6 +15,8 @@ from portfolio_rebalancer.targets import TargetAllocation
 
 from fastapi.exceptions import RequestValidationError
 
+from .middleware import request_id_middleware
+
 from .errors import validation_error_handler, value_error_handler
 
 from .schemas import (
@@ -22,12 +25,14 @@ from .schemas import (
     RebalanceResponse,
     RebalanceSummary,
     TradeOut,
+    PositionIn,
 )
 
 app = FastAPI(title="portfolio-rebalancer API", version="0.1.0")
 
 app.add_exception_handler(ValueError, value_error_handler)
 app.add_exception_handler(RequestValidationError, validation_error_handler)
+app.middleware("http")(request_id_middleware)
 
 # Dev: liberar Next.js local
 app.add_middleware(
@@ -119,6 +124,68 @@ async def api_import(
     }
 
 
+@app.post("/api/rebalance/b3", response_model=RebalanceResponse)
+async def api_rebalance_b3(
+    request: Request,
+    file: UploadFile = File(...),
+    user_id: str = "default",
+    no_tesouro: bool = False,
+    cash: float = 0.0,
+    mode: str = "TRADE",
+    fractional: bool = False,
+    min_notional: float = 0.0,
+    strict_prices: bool = False,
+) -> RebalanceResponse:
+    """
+    1-call endpoint:
+    - Upload do XLSX da B3
+    - Gera targets equal-weight
+    - Executa rebalance e retorna o mesmo payload de /api/rebalance
+    """
+    if not file.filename:
+        raise ValueError("missing filename")
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
+        content = await file.read()
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    res = import_b3_xlsx(
+        tmp_path,
+        user_id=str(user_id),
+        include_tesouro=not bool(no_tesouro),
+    )
+
+    # Monta request para reaproveitar a lógica do endpoint existente
+    positions_in = [
+        PositionIn(
+            ticker=(p.ticker or "").strip().upper(),
+            asset_type=p.asset_type,
+            quantity=float(p.quantity),
+            price=float(p.price),
+        )
+        for p in res.positions
+    ]
+
+    prices_json = {k.strip().upper(): float(v) for k, v in res.prices.items()}
+    targets_json = _build_equal_weight_targets(res.positions)
+
+    req = RebalanceRequest(
+        positions=positions_in,
+        prices=prices_json,
+        targets=targets_json,
+        cash=float(cash),
+        mode=mode,
+        fractional=bool(fractional),
+        min_notional=float(min_notional),
+        strict_prices=bool(strict_prices),
+        warnings=list(res.warnings or []),
+    )
+
+    # chama o handler já existente
+    return api_rebalance(req, request)
+
+
 def _holdings_snapshot(
     positions: list[Position],
     cash: float,
@@ -157,7 +224,7 @@ def _holdings_snapshot(
 
 
 @app.post("/api/rebalance", response_model=RebalanceResponse)
-def api_rebalance(req: RebalanceRequest) -> RebalanceResponse:
+def api_rebalance(req: RebalanceRequest, request: Request) -> RebalanceResponse:
     # positions do request
     positions = [
         Position(
@@ -241,10 +308,12 @@ def api_rebalance(req: RebalanceRequest) -> RebalanceResponse:
         n_trades=len(trades_out),
     )
 
-    return RebalanceResponse(
+    resp = RebalanceResponse(
         summary=summary,
         trades=trades_out,
         holdings_before=holdings_before,
         holdings_after=holdings_after,
         warnings=warnings,
     )
+    resp.request_id = request.state.request_id
+    return resp
