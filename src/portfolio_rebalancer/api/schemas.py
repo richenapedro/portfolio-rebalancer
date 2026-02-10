@@ -73,3 +73,18 @@ class RebalanceB3Response(BaseModel):
     trades: list[TradeOut]
     holdings_before: list[HoldingOut]
     holdings_after: list[HoldingOut]
+
+
+JobStatus = Literal["queued", "running", "done", "error"]
+
+
+class JobCreateResponse(WithRequestId):
+    job_id: str
+    status: JobStatus
+
+
+class JobStatusResponse(WithRequestId):
+    job_id: str
+    status: JobStatus
+    result: dict[str, Any] | None = None
+    error: dict[str, Any] | None = None

@@ -3,8 +3,8 @@ from __future__ import annotations
 import tempfile
 from typing import Any
 
-from fastapi import FastAPI, File, Request, UploadFile
-
+from fastapi import BackgroundTasks, FastAPI, File, Request, UploadFile
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
 from portfolio_rebalancer.execution import apply_trades
@@ -13,19 +13,18 @@ from portfolio_rebalancer.models import Portfolio, Position
 from portfolio_rebalancer.rebalance import rebalance
 from portfolio_rebalancer.targets import TargetAllocation
 
-from fastapi.exceptions import RequestValidationError
-
-from .middleware import request_id_middleware
-
 from .errors import validation_error_handler, value_error_handler
-
+from .jobs import create_job, get_job, set_done, set_error, set_running
+from .middleware import request_id_middleware
 from .schemas import (
     HoldingOut,
+    JobCreateResponse,
+    JobStatusResponse,
+    PositionIn,
     RebalanceRequest,
     RebalanceResponse,
     RebalanceSummary,
     TradeOut,
-    PositionIn,
 )
 
 app = FastAPI(title="portfolio-rebalancer API", version="0.1.0")
@@ -124,68 +123,6 @@ async def api_import(
     }
 
 
-@app.post("/api/rebalance/b3", response_model=RebalanceResponse)
-async def api_rebalance_b3(
-    request: Request,
-    file: UploadFile = File(...),
-    user_id: str = "default",
-    no_tesouro: bool = False,
-    cash: float = 0.0,
-    mode: str = "TRADE",
-    fractional: bool = False,
-    min_notional: float = 0.0,
-    strict_prices: bool = False,
-) -> RebalanceResponse:
-    """
-    1-call endpoint:
-    - Upload do XLSX da B3
-    - Gera targets equal-weight
-    - Executa rebalance e retorna o mesmo payload de /api/rebalance
-    """
-    if not file.filename:
-        raise ValueError("missing filename")
-
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
-        content = await file.read()
-        tmp.write(content)
-        tmp_path = tmp.name
-
-    res = import_b3_xlsx(
-        tmp_path,
-        user_id=str(user_id),
-        include_tesouro=not bool(no_tesouro),
-    )
-
-    # Monta request para reaproveitar a lógica do endpoint existente
-    positions_in = [
-        PositionIn(
-            ticker=(p.ticker or "").strip().upper(),
-            asset_type=p.asset_type,
-            quantity=float(p.quantity),
-            price=float(p.price),
-        )
-        for p in res.positions
-    ]
-
-    prices_json = {k.strip().upper(): float(v) for k, v in res.prices.items()}
-    targets_json = _build_equal_weight_targets(res.positions)
-
-    req = RebalanceRequest(
-        positions=positions_in,
-        prices=prices_json,
-        targets=targets_json,
-        cash=float(cash),
-        mode=mode,
-        fractional=bool(fractional),
-        min_notional=float(min_notional),
-        strict_prices=bool(strict_prices),
-        warnings=list(res.warnings or []),
-    )
-
-    # chama o handler já existente
-    return api_rebalance(req, request)
-
-
 def _holdings_snapshot(
     positions: list[Position],
     cash: float,
@@ -223,8 +160,7 @@ def _holdings_snapshot(
     return out, float(total_value)
 
 
-@app.post("/api/rebalance", response_model=RebalanceResponse)
-def api_rebalance(req: RebalanceRequest, request: Request) -> RebalanceResponse:
+def _rebalance_core(req: RebalanceRequest) -> RebalanceResponse:
     # positions do request
     positions = [
         Position(
@@ -308,12 +244,192 @@ def api_rebalance(req: RebalanceRequest, request: Request) -> RebalanceResponse:
         n_trades=len(trades_out),
     )
 
-    resp = RebalanceResponse(
+    return RebalanceResponse(
         summary=summary,
         trades=trades_out,
         holdings_before=holdings_before,
         holdings_after=holdings_after,
         warnings=warnings,
     )
+
+
+@app.post("/api/rebalance", response_model=RebalanceResponse)
+def api_rebalance(req: RebalanceRequest, request: Request) -> RebalanceResponse:
+    resp = _rebalance_core(req)
     resp.request_id = request.state.request_id
     return resp
+
+
+@app.post("/api/rebalance/b3", response_model=RebalanceResponse)
+async def api_rebalance_b3(
+    request: Request,
+    file: UploadFile = File(...),
+    user_id: str = "default",
+    no_tesouro: bool = False,
+    cash: float = 0.0,
+    mode: str = "TRADE",
+    fractional: bool = False,
+    min_notional: float = 0.0,
+    strict_prices: bool = False,
+) -> RebalanceResponse:
+    """
+    1-call endpoint:
+    - Upload do XLSX da B3
+    - Gera targets equal-weight
+    - Executa rebalance e retorna o mesmo payload de /api/rebalance
+    """
+    if not file.filename:
+        raise ValueError("missing filename")
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
+        content = await file.read()
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    res = import_b3_xlsx(
+        tmp_path,
+        user_id=str(user_id),
+        include_tesouro=not bool(no_tesouro),
+    )
+
+    positions_in = [
+        PositionIn(
+            ticker=(p.ticker or "").strip().upper(),
+            asset_type=p.asset_type,
+            quantity=float(p.quantity),
+            price=float(p.price),
+        )
+        for p in res.positions
+    ]
+
+    prices_json = {k.strip().upper(): float(v) for k, v in res.prices.items()}
+    targets_json = _build_equal_weight_targets(res.positions)
+
+    req = RebalanceRequest(
+        positions=positions_in,
+        prices=prices_json,
+        targets=targets_json,
+        cash=float(cash),
+        mode=mode,
+        fractional=bool(fractional),
+        min_notional=float(min_notional),
+        strict_prices=bool(strict_prices),
+        warnings=list(res.warnings or []),
+    )
+
+    return api_rebalance(req, request)
+
+
+async def _run_rebalance_b3_job(
+    job_id: str,
+    file_bytes: bytes,
+    user_id: str,
+    no_tesouro: bool,
+    cash: float,
+    mode: str,
+    fractional: bool,
+    min_notional: float,
+    strict_prices: bool,
+) -> None:
+    try:
+        set_running(job_id)
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
+            tmp.write(file_bytes)
+            tmp_path = tmp.name
+
+        res = import_b3_xlsx(
+            tmp_path,
+            user_id=str(user_id),
+            include_tesouro=not bool(no_tesouro),
+        )
+
+        positions_in = [
+            PositionIn(
+                ticker=(p.ticker or "").strip().upper(),
+                asset_type=p.asset_type,
+                quantity=float(p.quantity),
+                price=float(p.price),
+            )
+            for p in res.positions
+        ]
+
+        prices_json = {k.strip().upper(): float(v) for k, v in res.prices.items()}
+        targets_json = _build_equal_weight_targets(res.positions)
+
+        req = RebalanceRequest(
+            positions=positions_in,
+            prices=prices_json,
+            targets=targets_json,
+            cash=float(cash),
+            mode=mode,
+            fractional=bool(fractional),
+            min_notional=float(min_notional),
+            strict_prices=bool(strict_prices),
+            warnings=list(res.warnings or []),
+        )
+
+        resp = _rebalance_core(req)
+
+        job = get_job(job_id)
+        if job is not None:
+            resp.request_id = job.request_id
+
+        set_done(job_id, resp.model_dump())
+
+    except ValueError as e:
+        set_error(job_id, "VALUE_ERROR", str(e))
+    except Exception as e:
+        set_error(job_id, "UNEXPECTED_ERROR", str(e))
+
+
+@app.post("/api/rebalance/b3/jobs", response_model=JobCreateResponse, status_code=202)
+async def api_rebalance_b3_job_create(
+    background_tasks: BackgroundTasks,
+    request: Request,
+    file: UploadFile = File(...),
+    user_id: str = "default",
+    no_tesouro: bool = False,
+    cash: float = 0.0,
+    mode: str = "TRADE",
+    fractional: bool = False,
+    min_notional: float = 0.0,
+    strict_prices: bool = False,
+) -> JobCreateResponse:
+    if not file.filename:
+        raise ValueError("missing filename")
+
+    rec = create_job(request.state.request_id)
+    file_bytes = await file.read()
+
+    background_tasks.add_task(
+        _run_rebalance_b3_job,
+        rec.job_id,
+        file_bytes,
+        str(user_id),
+        bool(no_tesouro),
+        float(cash),
+        str(mode),
+        bool(fractional),
+        float(min_notional),
+        bool(strict_prices),
+    )
+
+    return JobCreateResponse(
+        job_id=rec.job_id, status=rec.status, request_id=rec.request_id
+    )
+
+
+@app.get("/api/jobs/{job_id}", response_model=JobStatusResponse)
+def api_job_status(job_id: str, request: Request) -> JobStatusResponse:
+    rec = get_job(job_id)
+    if rec is None:
+        raise ValueError(f"unknown job_id: {job_id}")
+
+    return JobStatusResponse(
+        job_id=rec.job_id,
+        status=rec.status,
+        result=rec.result,
+        error=rec.error,
+        request_id=rec.request_id,
+    )

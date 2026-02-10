@@ -115,3 +115,15 @@ def test_request_id_is_returned() -> None:
     data = r.json()
     assert "request_id" in data
     assert r.headers.get("X-Request-Id") == data["request_id"]
+
+
+def test_job_create_requires_file() -> None:
+    client = TestClient(app)
+    r = client.post("/api/rebalance/b3/jobs")
+    assert r.status_code == 422
+
+
+def test_job_status_unknown_returns_422() -> None:
+    client = TestClient(app)
+    r = client.get("/api/jobs/does-not-exist")
+    assert r.status_code == 422
