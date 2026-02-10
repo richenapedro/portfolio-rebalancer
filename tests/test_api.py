@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -62,3 +63,11 @@ def test_import_b3_endpoint_smoke() -> None:
     assert "positions" in body and body["positions"]
     assert "targets" in body and body["targets"]
     assert "prices" in body and body["prices"]
+
+
+def test_rebalance_validation_error_returns_422() -> None:
+    client = TestClient(app)
+    r = client.post("/api/rebalance", json={})
+    assert r.status_code == 422
+    data = r.json()
+    assert "error" in data
