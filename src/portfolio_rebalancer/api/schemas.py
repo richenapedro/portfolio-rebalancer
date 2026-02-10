@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -54,9 +54,22 @@ class RebalanceSummary(BaseModel):
     n_trades: int
 
 
-class RebalanceResponse(BaseModel):
+class WithRequestId(BaseModel):
+    request_id: Optional[str] = None
+
+
+class RebalanceResponse(WithRequestId):
     summary: RebalanceSummary
     trades: list[TradeOut]
     holdings_before: list[HoldingOut]
     holdings_after: list[HoldingOut]
     warnings: list[str]
+
+
+class RebalanceB3Response(BaseModel):
+    meta: dict[str, Any]
+    warnings: list[str]
+    summary: RebalanceSummary
+    trades: list[TradeOut]
+    holdings_before: list[HoldingOut]
+    holdings_after: list[HoldingOut]

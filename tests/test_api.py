@@ -71,3 +71,47 @@ def test_rebalance_validation_error_returns_422() -> None:
     assert r.status_code == 422
     data = r.json()
     assert "error" in data
+
+
+def test_rebalance_b3_endpoint_smoke() -> None:
+    client = TestClient(app)
+
+    xlsx = Path(__file__).parent / "fixtures" / "posicao-2026-01-12-13-32-18.xlsx"
+    if not xlsx.exists():
+        pytest.skip("missing fixture XLSX in repository")
+
+    with xlsx.open("rb") as f:
+        files = {
+            "file": (
+                xlsx.name,
+                f,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        }
+        r = client.post(
+            "/api/rebalance/b3?cash=100&mode=BUY&no_tesouro=false", files=files
+        )
+
+    assert r.status_code == 200
+    data = r.json()
+    assert "summary" in data
+    assert "trades" in data
+
+
+def test_request_id_is_returned() -> None:
+    client = TestClient(app)
+
+    payload = {
+        "positions": [
+            {"ticker": "AAA", "asset_type": "STOCK", "quantity": 1, "price": 10},
+        ],
+        "prices": {"AAA": 10},
+        "targets": {"AAA": 1.0},
+    }
+
+    r = client.post("/api/rebalance", json=payload)
+
+    assert r.status_code == 200
+    data = r.json()
+    assert "request_id" in data
+    assert r.headers.get("X-Request-Id") == data["request_id"]
