@@ -3,7 +3,7 @@ from __future__ import annotations
 import tempfile
 from typing import Any
 
-from fastapi import BackgroundTasks, FastAPI, File, Request, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Request, UploadFile, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -424,7 +424,7 @@ async def api_rebalance_b3_job_create(
 def api_job_status(job_id: str, request: Request) -> JobStatusResponse:
     rec = get_job(job_id)
     if rec is None:
-        raise ValueError(f"unknown job_id: {job_id}")
+        raise HTTPException(status_code=404, detail=f"unknown job_id: {job_id}")
 
     return JobStatusResponse(
         job_id=rec.job_id,
