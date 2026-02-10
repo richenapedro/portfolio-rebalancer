@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
-
-from fastapi.testclient import TestClient
-from backend.app import app
 
 from portfolio_rebalancer.api.app import app
 

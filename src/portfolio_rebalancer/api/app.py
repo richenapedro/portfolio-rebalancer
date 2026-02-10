@@ -12,6 +12,10 @@ from portfolio_rebalancer.models import Portfolio, Position
 from portfolio_rebalancer.rebalance import rebalance
 from portfolio_rebalancer.targets import TargetAllocation
 
+from fastapi.exceptions import RequestValidationError
+
+from .errors import validation_error_handler, value_error_handler
+
 from .schemas import (
     HoldingOut,
     RebalanceRequest,
@@ -21,6 +25,9 @@ from .schemas import (
 )
 
 app = FastAPI(title="portfolio-rebalancer API", version="0.1.0")
+
+app.add_exception_handler(ValueError, value_error_handler)
+app.add_exception_handler(RequestValidationError, validation_error_handler)
 
 # Dev: liberar Next.js local
 app.add_middleware(
