@@ -8,53 +8,20 @@ export type AllocationWeights = {
   bonds: number;
 };
 
+type Key = keyof AllocationWeights;
+
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
+function sumW(w: AllocationWeights) {
+  return w.stocks + w.fiis + w.bonds;
+}
 
-export function AllocationSliders(props: {
-  value: AllocationWeights;
-  onChange: (next: AllocationWeights) => void;
-}) {
-  const w = props.value;
-
-  const sum = useMemo(() => w.stocks + w.fiis + w.bonds, [w]);
-  const remaining = 100 - sum;
-
-  function setOne(key: keyof AllocationWeights, raw: number) {
-    // raw já vem do range (Number(e.target.value))
-    const desired = raw;
-
-    const current = w[key];
-    const others = sum - current;
-
-    // teto global: esse slider só pode subir até consumir o restante
-    const maxAllowed = 100 - others; // == current + remaining
-
-    const nextVal = clamp(desired, 0, maxAllowed);
-
-    props.onChange({ ...w, [key]: nextVal });
-  }
-
+function ValuePill({ v }: { v: number }) {
   return (
-    <div className="border rounded p-4 space-y-4">
-      <div className="flex items-baseline justify-between">
-        <h3 className="font-semibold">Alocação (soma = 100%)</h3>
-        <span className="text-sm font-mono">{sum}%</span>
-      </div>
-
-      <div className="text-sm text-gray-600">
-        Restante: <span className="font-mono">{remaining}%</span>
-      </div>
-
-      <SliderRow label="Ações" value={w.stocks} onChange={(v) => setOne("stocks", v)} />
-      <SliderRow label="FIIs" value={w.fiis} onChange={(v) => setOne("fiis", v)} />
-      <SliderRow label="Tesouro / RF" value={w.bonds} onChange={(v) => setOne("bonds", v)} />
-
-      <p className="text-sm text-gray-600">
-        Você pode aumentar qualquer slider somente até consumir o restante (a soma nunca passa de 100).
-      </p>
-    </div>
+    <span className="rounded-md border border-[var(--border)] bg-[var(--surface-alt)] px-2 py-0.5 text-xs font-mono text-[var(--text-primary)]">
+      {v}%
+    </span>
   );
 }
 
@@ -63,11 +30,19 @@ function SliderRow(props: {
   value: number;
   onChange: (v: number) => void;
 }) {
+  // preenchimento do track via background inline (funciona bem em webkit e fica ok no firefox com o CSS abaixo)
+  const pct = clamp(props.value, 0, 100);
+  const bg = `linear-gradient(to right,
+    var(--range-fill) 0%,
+    var(--range-fill) ${pct}%,
+    var(--range-track) ${pct}%,
+    var(--range-track) 100%)`;
+
   return (
-    <div className="space-y-2">
-      <div className="flex justify-between">
-        <span>{props.label}</span>
-        <span className="font-mono">{props.value}%</span>
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-[var(--text-primary)]">{props.label}</span>
+        <ValuePill v={props.value} />
       </div>
 
       <input
@@ -77,8 +52,51 @@ function SliderRow(props: {
         step={1}
         value={props.value}
         onChange={(e) => props.onChange(Number(e.target.value))}
-        className="w-full"
+        onInput={(e) => props.onChange(Number((e.target as HTMLInputElement).value))}
+        className="pr-range w-full"
+        style={{ background: bg }}
       />
     </div>
   );
 }
+
+export function AllocationSliders(props: {
+  value: AllocationWeights;
+  onChange: (next: AllocationWeights) => void;
+}) {
+  const w = props.value;
+
+  const sum = useMemo(() => sumW(w), [w]);
+  const remaining = 100 - sum;
+
+  function setOne(key: Key, raw: number) {
+    const desired = clamp(Math.round(raw), 0, 100);
+    const current = w[key];
+    const inc = desired - current;
+
+    if (inc > 0 && inc > remaining) {
+      props.onChange({ ...w, [key]: current + remaining });
+      return;
+    }
+    props.onChange({ ...w, [key]: desired });
+  }
+
+  const remainingCls =
+    remaining > 0 ? "text-[color:var(--ok)]" : "text-[color:var(--danger)]";
+
+  return (
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+      {/* ✅ Sem título duplicado + sem “100%” */}
+      <div className="mb-3 text-xs text-[var(--text-muted)]">
+        Restante: <span className={`font-mono ${remainingCls}`}>{remaining}%</span>
+      </div>
+
+      <div className="space-y-3">
+        <SliderRow label="Ações" value={w.stocks} onChange={(v) => setOne("stocks", v)} />
+        <SliderRow label="FIIs" value={w.fiis} onChange={(v) => setOne("fiis", v)} />
+        <SliderRow label="Tesouro / RF" value={w.bonds} onChange={(v) => setOne("bonds", v)} />
+      </div>
+    </div>
+  );
+}
+
