@@ -1,217 +1,91 @@
-"use client";
+import Link from "next/link";
 
-import { useEffect, useState } from "react";
-import { AllocationSliders, type AllocationWeights } from "./components/AllocationSliders";
-import { createRebalanceB3Job, getJob, type JobStatusResponse } from "@/lib/api";
-
-type Mode = "BUY" | "SELL" | "TRADE";
+function FeatureCard(props: { title: string; desc: string }) {
+  return (
+    <div
+      className="bg-[var(--surface)] rounded-xl p-5 space-y-2
+                 border border-[var(--border)]
+                 shadow-sm hover:shadow-md
+                 hover:bg-[var(--surface-alt)] transition"
+    >
+      <div className="font-semibold text-[var(--text-primary)]">{props.title}</div>
+      <div className="text-sm text-[var(--text-muted)]">{props.desc}</div>
+    </div>
+  );
+}
 
 export default function Home() {
-  const [file, setFile] = useState<File | null>(null);
-  const [cash, setCash] = useState<number>(100);
-  const [mode, setMode] = useState<Mode>("BUY");
-  const [noTesouro, setNoTesouro] = useState(false);
-
-  const [weights, setWeights] = useState<AllocationWeights>({
-    stocks: 40,
-    fiis: 30,
-    bonds: 30,
-  });
-
-  const weightsSum = weights.stocks + weights.fiis + weights.bonds;
-  const canSubmit = weightsSum === 100;
-
-  const [jobId, setJobId] = useState<string | null>(null);
-  const [job, setJob] = useState<JobStatusResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-
-  async function onRun() {
-    if (!file) return;
-    if (!canSubmit) {
-      setErr("A soma dos sliders deve ser 100% para calcular.");
-      return;
-    }
-
-    setErr(null);
-    setLoading(true);
-    setJob(null);
-    setJobId(null);
-
-    try {
-      const created = await createRebalanceB3Job({
-        file,
-        cash,
-        mode,
-        noTesouro,
-        weights, // <-- NOVO
-      });
-
-      setJobId(created.job_id);
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setErr(msg);
-      setLoading(false);
-    }
-  }
-
-  // polling do job
-  useEffect(() => {
-    if (!jobId) return;
-    const id = jobId;
-
-    let cancelled = false;
-
-    async function tick() {
-      try {
-        const data = await getJob(id);
-        if (cancelled) return;
-
-        setJob(data);
-
-        if (data.status === "done" || data.status === "error") {
-          setLoading(false);
-          return;
-        }
-
-        setTimeout(tick, 1000);
-      } catch (e: unknown) {
-        if (cancelled) return;
-        const msg = e instanceof Error ? e.message : String(e);
-        setErr(msg);
-        setLoading(false);
-      }
-    }
-
-    tick();
-    return () => {
-      cancelled = true;
-    };
-  }, [jobId]);
-
-  const result = job?.result ?? null;
-  const summary = result?.summary;
-  const trades = result?.trades ?? [];
-
   return (
-    <main className="p-8 space-y-6 max-w-3xl">
-      <h1 className="text-2xl font-bold">Portfolio Rebalancer</h1>
+    <main className="space-y-10">
+      {/* HERO */}
+      <section
+        className="bg-[var(--surface)] rounded-2xl p-10
+                   border border-[var(--border)]
+                   shadow-sm dark:shadow-black/30"
+      >
+        <div className="space-y-5 max-w-2xl">
+          <h1 className="text-3xl md:text-4xl font-semibold leading-tight text-[var(--heading)]">
+            Seu painel para decisões melhores de investimento
+          </h1>
 
-      <div className="space-y-4 border rounded p-4">
-        <div className="space-y-2">
-          <label className="block font-medium">B3 XLSX (Posição)</label>
-          <input
-            type="file"
-            accept=".xlsx"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            className="block"
-          />
-          {file && (
-            <p className="text-sm text-gray-600">
-              Selected: <span className="font-mono">{file.name}</span>
-            </p>
-          )}
-        </div>
+          <p className="text-[var(--text-muted)]">
+            Ferramentas para organizar carteira, simular aportes e automatizar rebalanceamentos —
+            começando pelo Brasil (B3).
+          </p>
 
-        <div className="flex gap-6 flex-wrap">
-          <div className="space-y-2">
-            <label className="block font-medium">Cash</label>
-            <input
-              type="number"
-              value={cash}
-              onChange={(e) => setCash(Number(e.target.value))}
-              className="border rounded p-2 w-40"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="block font-medium">Mode</label>
-            <select
-              value={mode}
-              onChange={(e) => setMode(e.target.value as Mode)}
-              className="border rounded p-2 w-40"
+          <div className="flex flex-wrap gap-3">
+            {/* Primary */}
+            <Link
+              href="/tools"
+              className="cursor-pointer rounded-lg bg-[var(--primary)] px-4 py-2 text-sm font-semibold
+                         text-[var(--on-primary)] hover:bg-[var(--primary-hover)] transition"
             >
-              <option value="TRADE">TRADE</option>
-              <option value="BUY">BUY</option>
-              <option value="SELL">SELL</option>
-            </select>
-          </div>
+              Ver ferramentas
+            </Link>
 
-          <div className="space-y-2">
-            <label className="block font-medium">Tesouro</label>
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={noTesouro}
-                onChange={(e) => setNoTesouro(e.target.checked)}
-              />
-              <span className="text-sm">No Tesouro (exclude)</span>
-            </label>
+            {/* Secondary */}
+            <Link
+              href="/tools/rebalance"
+              className="cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-sm font-medium
+                         text-[var(--text-primary)] hover:bg-[var(--surface-alt)] transition"
+            >
+              Ir direto ao rebalanceamento
+            </Link>
           </div>
         </div>
+      </section>
 
-        {/* NOVO: sliders de alocação */}
-        <AllocationSliders value={weights} onChange={setWeights} />
+      {/* FEATURES */}
+      <section className="space-y-4">
+        <h2 className="text-xl font-semibold text-[var(--heading)]">Principais recursos</h2>
 
-        <button
-          onClick={onRun}
-          disabled={!file || loading || !canSubmit}
-          className="bg-blue-600 disabled:bg-gray-400 text-white px-4 py-2 rounded"
-        >
-          {loading ? "Running..." : "Run (Jobs)"}
-        </button>
-
-        {!canSubmit && (
-          <div className="text-sm text-gray-600">
-            Soma atual: <span className="font-mono">{weightsSum}%</span> — ajuste até{" "}
-            <span className="font-mono">100%</span> para habilitar.
-          </div>
-        )}
-
-        {err && (
-          <div className="text-sm text-red-600">
-            Error: <span className="font-mono">{err}</span>
-          </div>
-        )}
-
-        {jobId && (
-          <div className="text-sm">
-            Job ID: <span className="font-mono">{jobId}</span>
-          </div>
-        )}
-
-        {job && (
-          <div className="text-sm">
-            Status: <span className="font-mono">{job.status}</span>{" "}
-            {job.request_id && (
-              <>
-                | Request ID: <span className="font-mono">{job.request_id}</span>
-              </>
-            )}
-          </div>
-        )}
-      </div>
-
-      {job?.status === "error" && job.error && (
-        <div className="border rounded p-4">
-          <h2 className="font-semibold">Job Error</h2>
-          <pre className="text-sm whitespace-pre-wrap">{JSON.stringify(job.error, null, 2)}</pre>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <FeatureCard
+            title="Rebalanceamento por aporte"
+            desc="Diga quanto vai aportar e receba uma lista de trades para aproximar sua alocação alvo."
+          />
+          <FeatureCard
+            title="Import B3 (XLSX)"
+            desc="Faça upload do arquivo de posição da B3 e rode jobs assíncronos com tracking."
+          />
+          <FeatureCard
+            title="Alocação por classe"
+            desc="Defina proporções (Ações/FIIs/Tesouro) e aplique o rebalance conforme sua estratégia."
+          />
+          <FeatureCard
+            title="Relatório de trades"
+            desc="Tabela com filtros, busca e total investido — pronto para execução manual."
+          />
+          <FeatureCard
+            title="Histórico (em breve)"
+            desc="Salve jobs, compare antes/depois e acompanhe evolução da carteira."
+          />
+          <FeatureCard
+            title="Mais ferramentas"
+            desc="Calculadoras e análises como preço justo, dividendos e screening (roadmap)."
+          />
         </div>
-      )}
-
-      {job?.status === "done" && summary && (
-        <div className="space-y-4">
-          <div className="border rounded p-4">
-            <h2 className="font-semibold">Summary</h2>
-            <pre className="text-sm whitespace-pre-wrap">{JSON.stringify(summary, null, 2)}</pre>
-          </div>
-
-          <div className="border rounded p-4">
-            <h2 className="font-semibold">Trades ({trades.length})</h2>
-            <pre className="text-sm whitespace-pre-wrap">{JSON.stringify(trades, null, 2)}</pre>
-          </div>
-        </div>
-      )}
+      </section>
     </main>
   );
 }

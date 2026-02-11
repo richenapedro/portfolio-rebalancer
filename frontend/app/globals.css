@@ -1,26 +1,84 @@
 @import "tailwindcss";
 
+/* LIGHT */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f4efe6;
+  --surface: #ffffff;
+  --surface-alt: #f8f3ea;
+  --border: rgba(47, 42, 36, 0.14);
+
+  --text-primary: #2f2a24;
+  --text-secondary: rgba(47, 42, 36, 0.78);
+  --text-muted: #6b6258;
+
+  --primary: #2f6f73;
+  --primary-hover: #25595c;
+
+  /* texto em cima do botão primary (no light com teal fica bom branco) */
+  --on-primary: #ffffff;
+
+  --buy: #2e8b57;
+  --sell: #c84c3a;
+
+  --link: #2f6f73;
+  --link-hover: #25595c;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* DARK */
+.dark {
+  /* Base */
+  --background: #151a2a; /* navy profundo */
+  --surface: #1b2133; /* cards */
+  --surface-alt: #232a40; /* hover/elevated */
+
+  /* Texto */
+  --text-primary: #f3ede3; /* off-white quente */
+  --text-secondary: rgba(243, 237, 227, 0.82);
+  --text-muted: rgba(243, 237, 227, 0.62);
+
+  /* Bordas */
+  --border: rgba(243, 237, 227, 0.10);
+
+  /* Acento (champagne) */
+  --primary: #e3be75;
+  --primary-hover: #d2aa5d;
+
+  /* texto em cima do botão primary (no dark com gold tem que ser escuro) */
+  --on-primary: #1a1a1a;
+
+  --buy: #3ecf8e;
+  --sell: #ff6b6b;
+
+  --link: #a9c7ff;
+  --link-hover: #7aa7ff;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* Background com glow apenas no dark */
+.dark{
+  --background: #151a2a;
+  --surface: #1b2133;
+  --surface-alt: #232a40;
+
+  --text-primary: #f3ede3;
+  --text-secondary: rgba(243, 237, 227, 0.82);
+  --text-muted: rgba(243, 237, 227, 0.62);
+
+  --border: rgba(243, 237, 227, 0.10);
+
+  --primary: #e3be75;
+  --primary-hover: #d2aa5d;
+
+  --on-primary: #1a1a1a;     /* texto no botão gold */
+  --heading: #e3be75;        /* títulos em gold */
+}
+
+
+html,
+body {
+  height: 100%;
 }
 
 body {
   background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  color: var(--text-primary);
 }
