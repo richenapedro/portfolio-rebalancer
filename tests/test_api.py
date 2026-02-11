@@ -123,7 +123,7 @@ def test_job_create_requires_file() -> None:
     assert r.status_code == 422
 
 
-def test_job_status_unknown_returns_422() -> None:
+def test_job_status_unknown_returns_404() -> None:
     client = TestClient(app)
     r = client.get("/api/jobs/does-not-exist")
-    assert r.status_code == 422
+    assert r.status_code == 404
