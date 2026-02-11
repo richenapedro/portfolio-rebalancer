@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createRebalanceB3Job, getJob, JobStatusResponse } from "@/lib/api";
+import { AllocationSliders, type AllocationWeights } from "./components/AllocationSliders";
+import { createRebalanceB3Job, getJob, type JobStatusResponse } from "@/lib/api";
 
 type Mode = "BUY" | "SELL" | "TRADE";
 
@@ -11,6 +12,15 @@ export default function Home() {
   const [mode, setMode] = useState<Mode>("BUY");
   const [noTesouro, setNoTesouro] = useState(false);
 
+  const [weights, setWeights] = useState<AllocationWeights>({
+    stocks: 40,
+    fiis: 30,
+    bonds: 30,
+  });
+
+  const weightsSum = weights.stocks + weights.fiis + weights.bonds;
+  const canSubmit = weightsSum === 100;
+
   const [jobId, setJobId] = useState<string | null>(null);
   const [job, setJob] = useState<JobStatusResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -18,6 +28,10 @@ export default function Home() {
 
   async function onRun() {
     if (!file) return;
+    if (!canSubmit) {
+      setErr("A soma dos sliders deve ser 100% para calcular.");
+      return;
+    }
 
     setErr(null);
     setLoading(true);
@@ -30,6 +44,7 @@ export default function Home() {
         cash,
         mode,
         noTesouro,
+        weights, // <-- NOVO
       });
 
       setJobId(created.job_id);
@@ -43,13 +58,13 @@ export default function Home() {
   // polling do job
   useEffect(() => {
     if (!jobId) return;
-    const id = jobId; // <-- agora é string aqui dentro
+    const id = jobId;
 
     let cancelled = false;
 
     async function tick() {
       try {
-        const data = await getJob(id); // usa id
+        const data = await getJob(id);
         if (cancelled) return;
 
         setJob(data);
@@ -73,7 +88,6 @@ export default function Home() {
       cancelled = true;
     };
   }, [jobId]);
-
 
   const result = job?.result ?? null;
   const summary = result?.summary;
@@ -136,13 +150,23 @@ export default function Home() {
           </div>
         </div>
 
+        {/* NOVO: sliders de alocação */}
+        <AllocationSliders value={weights} onChange={setWeights} />
+
         <button
           onClick={onRun}
-          disabled={!file || loading}
+          disabled={!file || loading || !canSubmit}
           className="bg-blue-600 disabled:bg-gray-400 text-white px-4 py-2 rounded"
         >
           {loading ? "Running..." : "Run (Jobs)"}
         </button>
+
+        {!canSubmit && (
+          <div className="text-sm text-gray-600">
+            Soma atual: <span className="font-mono">{weightsSum}%</span> — ajuste até{" "}
+            <span className="font-mono">100%</span> para habilitar.
+          </div>
+        )}
 
         {err && (
           <div className="text-sm text-red-600">
@@ -179,16 +203,12 @@ export default function Home() {
         <div className="space-y-4">
           <div className="border rounded p-4">
             <h2 className="font-semibold">Summary</h2>
-            <pre className="text-sm whitespace-pre-wrap">
-              {JSON.stringify(summary, null, 2)}
-            </pre>
+            <pre className="text-sm whitespace-pre-wrap">{JSON.stringify(summary, null, 2)}</pre>
           </div>
 
           <div className="border rounded p-4">
             <h2 className="font-semibold">Trades ({trades.length})</h2>
-            <pre className="text-sm whitespace-pre-wrap">
-              {JSON.stringify(trades, null, 2)}
-            </pre>
+            <pre className="text-sm whitespace-pre-wrap">{JSON.stringify(trades, null, 2)}</pre>
           </div>
         </div>
       )}
