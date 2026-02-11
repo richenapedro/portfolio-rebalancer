@@ -16,12 +16,13 @@ function fmtNum(n: number) {
 }
 
 function SideBadge(props: { side: "BUY" | "SELL" }) {
-  const bg = props.side === "BUY" ? "var(--buy)" : "var(--sell)";
+  const cls =
+    props.side === "BUY"
+      ? "bg-[color:var(--buy)]/20 text-[color:var(--buy)] border-[color:var(--buy)]/30"
+      : "bg-[color:var(--sell)]/20 text-[color:var(--sell)] border-[color:var(--sell)]/30";
+
   return (
-    <span
-      className="inline-flex items-center rounded-md px-2 py-1 text-xs font-semibold tracking-wide text-white"
-      style={{ backgroundColor: bg }}
-    >
+    <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold ${cls}`}>
       {props.side}
     </span>
   );

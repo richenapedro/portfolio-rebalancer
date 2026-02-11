@@ -1,28 +1,43 @@
 @import "tailwindcss";
 
-/* LIGHT */
+/* LIGHT (mais consistente) */
 :root {
-  --background: #f4efe6;
-  --surface: #ffffff;
-  --surface-alt: #f8f3ea;
-  --border: rgba(47, 42, 36, 0.14);
+  /* Base */
+  --background: #f4efe6;         /* beige */
+  --surface: #ffffff;            /* card */
+  --surface-alt: #fbf7f0;        /* card/inputs */
+  --border: rgba(47, 42, 36, 0.12);
 
+  /* Texto */
   --text-primary: #2f2a24;
   --text-secondary: rgba(47, 42, 36, 0.78);
-  --text-muted: #6b6258;
+  --text-muted: rgba(47, 42, 36, 0.58);
 
+  /* Acento (teal) */
   --primary: #2f6f73;
   --primary-hover: #25595c;
-
-  /* texto em cima do botão primary (no light com teal fica bom branco) */
   --on-primary: #ffffff;
 
-  --buy: #2e8b57;
+  /* Estados (não competir com o teal) */
+  --buy: #1f7a4d;    /* verde mais “neutro”, menos teal */
   --sell: #c84c3a;
 
   --link: #2f6f73;
   --link-hover: #25595c;
+
+  /* Sliders */
+  --range-fill: var(--primary);                 /* fill do slider = teal */
+  --range-track: rgba(47, 42, 36, 0.18);        /* track mais visível no light */
+  --ok: #16a34a;
+  --danger: #dc2626;
 }
+
+
+/* Opcional (recomendado): inputs e selects sempre “iguais” no light */
+input, select, textarea {
+  color: var(--text-primary);
+}
+
 
 /* DARK */
 .dark {
@@ -51,6 +66,11 @@
 
   --link: #a9c7ff;
   --link-hover: #7aa7ff;
+
+  --range-fill: var(--primary-hover);  /* no dark: o amarelo do hover */
+  --range-track: var(--border);
+  --ok: #22c55e;
+  --danger: #fb7185;
 }
 
 /* Background com glow apenas no dark */
@@ -81,4 +101,101 @@ body {
 body {
   background: var(--background);
   color: var(--text-primary);
+}
+
+.pr-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 18px; /* antes 26 */
+  border-radius: 999px;
+  background: var(--range-track);
+}
+
+.pr-range::-webkit-slider-runnable-track {
+  height: 4px; /* antes 6 */
+  border-radius: 999px;
+  background: transparent;
+}
+
+.pr-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;   /* antes 16 */
+  height: 14px;  /* antes 16 */
+  border-radius: 999px;
+  background: var(--range-fill);
+  border: 2px solid var(--surface);
+  margin-top: -5px;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.15);
+}
+
+.pr-range::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--range-track);
+}
+
+.pr-range::-moz-range-progress {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--range-fill);
+}
+
+.pr-range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--range-fill);
+  border: 2px solid var(--surface);
+}
+
+/* --- FORCE range thin (Chrome/Edge/Safari/Firefox) --- */
+input[type="range"].pr-range {
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  height: 14px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  background: var(--range-track) !important; /* fallback */
+}
+
+
+/* WebKit track */
+input[type="range"].pr-range::-webkit-slider-runnable-track {
+  -webkit-appearance: none !important;
+  height: 3px !important;          /* MAIS FINO */
+  border-radius: 999px !important;
+  background: transparent !important; /* fill vem inline */
+}
+
+/* WebKit thumb */
+input[type="range"].pr-range::-webkit-slider-thumb {
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  width: 12px !important;
+  height: 12px !important;
+  border-radius: 999px !important;
+  background: var(--range-fill) !important;
+  border: 2px solid var(--surface) !important;
+  margin-top: -4.5px !important;   /* centraliza no track de 3px */
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Firefox track + progress + thumb */
+input[type="range"].pr-range::-moz-range-track {
+  height: 3px !important;
+  border-radius: 999px !important;
+  background: var(--range-track) !important;
+}
+input[type="range"].pr-range::-moz-range-progress {
+  height: 3px !important;
+  border-radius: 999px !important;
+  background: var(--range-fill) !important;
+}
+input[type="range"].pr-range::-moz-range-thumb {
+  width: 12px !important;
+  height: 12px !important;
+  border-radius: 999px !important;
+  background: var(--range-fill) !important;
+  border: 2px solid var(--surface) !important;
 }
