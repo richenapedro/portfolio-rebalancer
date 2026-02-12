@@ -215,3 +215,7 @@ tests/fixtures/
 # Output
 out/
 
+
+# artifacts
+*.zip
+

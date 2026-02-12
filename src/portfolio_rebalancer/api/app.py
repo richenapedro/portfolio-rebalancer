@@ -3,7 +3,15 @@ from __future__ import annotations
 import tempfile
 from typing import Any
 
-from fastapi import BackgroundTasks, FastAPI, File, Request, UploadFile, HTTPException
+from fastapi import (
+    BackgroundTasks,
+    FastAPI,
+    File,
+    Form,
+    Request,
+    UploadFile,
+    HTTPException,
+)
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -12,6 +20,7 @@ from portfolio_rebalancer.importers.b3_xlsx import import_b3_xlsx
 from portfolio_rebalancer.models import Portfolio, Position
 from portfolio_rebalancer.rebalance import rebalance
 from portfolio_rebalancer.targets import TargetAllocation
+from portfolio_rebalancer.targets_default import build_weighted_targets
 
 from .errors import validation_error_handler, value_error_handler
 from .jobs import create_job, get_job, set_done, set_error, set_running
@@ -102,6 +111,14 @@ async def api_import(
         user_id=str(user_id),
         include_tesouro=not bool(no_tesouro),
     )
+    pf0 = Portfolio(positions=res.positions, cash=0.0)
+    w = pf0.weights_by_asset_type()  # 0..1
+
+    weights_current = {
+        "stocks": float(w.get("STOCK", 0.0) * 100.0),
+        "fiis": float(w.get("FII", 0.0) * 100.0),
+        "bonds": float(w.get("BOND", 0.0) * 100.0),
+    }
 
     positions_json = [_position_to_dict(p) for p in res.positions]
     prices_json = {k.strip().upper(): float(v) for k, v in res.prices.items()}
@@ -120,6 +137,7 @@ async def api_import(
         "positions": positions_json,
         "prices": prices_json,
         "targets": targets_json,
+        "weights_current": weights_current,
     }
 
 
@@ -264,13 +282,16 @@ def api_rebalance(req: RebalanceRequest, request: Request) -> RebalanceResponse:
 async def api_rebalance_b3(
     request: Request,
     file: UploadFile = File(...),
-    user_id: str = "default",
-    no_tesouro: bool = False,
-    cash: float = 0.0,
-    mode: str = "TRADE",
-    fractional: bool = False,
-    min_notional: float = 0.0,
-    strict_prices: bool = False,
+    user_id: str = Form("default"),
+    no_tesouro: bool = Form(False),
+    cash: float = Form(0.0),
+    mode: str = Form("TRADE"),
+    fractional: bool = Form(False),
+    min_notional: float = Form(0.0),
+    strict_prices: bool = Form(False),
+    w_stock: float = Form(100.0),
+    w_fii: float = Form(0.0),
+    w_bond: float = Form(0.0),
 ) -> RebalanceResponse:
     """
     1-call endpoint:
@@ -303,7 +324,13 @@ async def api_rebalance_b3(
     ]
 
     prices_json = {k.strip().upper(): float(v) for k, v in res.prices.items()}
-    targets_json = _build_equal_weight_targets(res.positions)
+    targets_json = build_weighted_targets(
+        res.positions,
+        w_stock=w_stock,
+        w_fii=w_fii,
+        w_bond=w_bond,
+        include_tesouro=not bool(no_tesouro),
+    )
 
     req = RebalanceRequest(
         positions=positions_in,
@@ -330,6 +357,9 @@ async def _run_rebalance_b3_job(
     fractional: bool,
     min_notional: float,
     strict_prices: bool,
+    w_stock: float,
+    w_fii: float,
+    w_bond: float,
 ) -> None:
     try:
         set_running(job_id)
@@ -355,7 +385,13 @@ async def _run_rebalance_b3_job(
         ]
 
         prices_json = {k.strip().upper(): float(v) for k, v in res.prices.items()}
-        targets_json = _build_equal_weight_targets(res.positions)
+        targets_json = build_weighted_targets(
+            res.positions,
+            w_stock=w_stock,
+            w_fii=w_fii,
+            w_bond=w_bond,
+            include_tesouro=not bool(no_tesouro),
+        )
 
         req = RebalanceRequest(
             positions=positions_in,
@@ -388,13 +424,16 @@ async def api_rebalance_b3_job_create(
     background_tasks: BackgroundTasks,
     request: Request,
     file: UploadFile = File(...),
-    user_id: str = "default",
-    no_tesouro: bool = False,
-    cash: float = 0.0,
-    mode: str = "TRADE",
-    fractional: bool = False,
-    min_notional: float = 0.0,
-    strict_prices: bool = False,
+    user_id: str = Form("default"),
+    no_tesouro: bool = Form(False),
+    cash: float = Form(0.0),
+    mode: str = Form("TRADE"),
+    fractional: bool = Form(False),
+    min_notional: float = Form(0.0),
+    strict_prices: bool = Form(False),
+    w_stock: float = Form(100.0),
+    w_fii: float = Form(0.0),
+    w_bond: float = Form(0.0),
 ) -> JobCreateResponse:
     if not file.filename:
         raise ValueError("missing filename")
@@ -413,6 +452,9 @@ async def api_rebalance_b3_job_create(
         bool(fractional),
         float(min_notional),
         bool(strict_prices),
+        float(w_stock),
+        float(w_fii),
+        float(w_bond),
     )
 
     return JobCreateResponse(
