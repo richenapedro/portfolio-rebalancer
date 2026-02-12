@@ -1,3 +1,4 @@
+/* AllocationSliders.tsx */
 "use client";
 
 import { useMemo } from "react";
@@ -25,12 +26,7 @@ function ValuePill({ v }: { v: number }) {
   );
 }
 
-function SliderRow(props: {
-  label: string;
-  value: number;
-  onChange: (v: number) => void;
-}) {
-  // preenchimento do track via background inline (funciona bem em webkit e fica ok no firefox com o CSS abaixo)
+function SliderRow(props: { label: string; value: number; onChange: (v: number) => void }) {
   const pct = clamp(props.value, 0, 100);
   const bg = `linear-gradient(to right,
     var(--range-fill) 0%,
@@ -60,10 +56,7 @@ function SliderRow(props: {
   );
 }
 
-export function AllocationSliders(props: {
-  value: AllocationWeights;
-  onChange: (next: AllocationWeights) => void;
-}) {
+export function AllocationSliders(props: { value: AllocationWeights; onChange: (next: AllocationWeights) => void }) {
   const w = props.value;
 
   const sum = useMemo(() => sumW(w), [w]);
@@ -81,12 +74,10 @@ export function AllocationSliders(props: {
     props.onChange({ ...w, [key]: desired });
   }
 
-  const remainingCls =
-    remaining > 0 ? "text-[color:var(--ok)]" : "text-[color:var(--danger)]";
+  const remainingCls = remaining > 0 ? "text-[color:var(--ok)]" : "text-[color:var(--danger)]";
 
   return (
     <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
-      {/* ✅ Sem título duplicado + sem “100%” */}
       <div className="mb-3 text-xs text-[var(--text-muted)]">
         Restante: <span className={`font-mono ${remainingCls}`}>{remaining}%</span>
       </div>
@@ -99,4 +90,3 @@ export function AllocationSliders(props: {
     </div>
   );
 }
-

@@ -1,3 +1,4 @@
+/* global.css */
 @import "tailwindcss";
 
 /* LIGHT (mais consistente) */
@@ -19,35 +20,33 @@
   --on-primary: #ffffff;
 
   /* Estados (não competir com o teal) */
-  --buy: #1f7a4d;    /* verde mais “neutro”, menos teal */
+  --buy: #1f7a4d;
   --sell: #c84c3a;
 
   --link: #2f6f73;
   --link-hover: #25595c;
 
   /* Sliders */
-  --range-fill: var(--primary);                 /* fill do slider = teal */
-  --range-track: rgba(47, 42, 36, 0.18);        /* track mais visível no light */
+  --range-fill: var(--primary);
+  --range-track: rgba(47, 42, 36, 0.18);
   --ok: #16a34a;
   --danger: #dc2626;
 }
 
-
-/* Opcional (recomendado): inputs e selects sempre “iguais” no light */
+/* inputs/selects consistentes */
 input, select, textarea {
   color: var(--text-primary);
 }
 
-
 /* DARK */
 .dark {
   /* Base */
-  --background: #151a2a; /* navy profundo */
-  --surface: #1b2133; /* cards */
-  --surface-alt: #232a40; /* hover/elevated */
+  --background: #151a2a;
+  --surface: #1b2133;
+  --surface-alt: #232a40;
 
   /* Texto */
-  --text-primary: #f3ede3; /* off-white quente */
+  --text-primary: #f3ede3;
   --text-secondary: rgba(243, 237, 227, 0.82);
   --text-muted: rgba(243, 237, 227, 0.62);
 
@@ -57,8 +56,6 @@ input, select, textarea {
   /* Acento (champagne) */
   --primary: #e3be75;
   --primary-hover: #d2aa5d;
-
-  /* texto em cima do botão primary (no dark com gold tem que ser escuro) */
   --on-primary: #1a1a1a;
 
   --buy: #3ecf8e;
@@ -67,31 +64,13 @@ input, select, textarea {
   --link: #a9c7ff;
   --link-hover: #7aa7ff;
 
-  --range-fill: var(--primary-hover);  /* no dark: o amarelo do hover */
+  --range-fill: var(--primary-hover);
   --range-track: var(--border);
   --ok: #22c55e;
   --danger: #fb7185;
+
+  --heading: #e3be75;
 }
-
-/* Background com glow apenas no dark */
-.dark{
-  --background: #151a2a;
-  --surface: #1b2133;
-  --surface-alt: #232a40;
-
-  --text-primary: #f3ede3;
-  --text-secondary: rgba(243, 237, 227, 0.82);
-  --text-muted: rgba(243, 237, 227, 0.62);
-
-  --border: rgba(243, 237, 227, 0.10);
-
-  --primary: #e3be75;
-  --primary-hover: #d2aa5d;
-
-  --on-primary: #1a1a1a;     /* texto no botão gold */
-  --heading: #e3be75;        /* títulos em gold */
-}
-
 
 html,
 body {
@@ -103,69 +82,31 @@ body {
   color: var(--text-primary);
 }
 
-.pr-range {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 100%;
-  height: 18px; /* antes 26 */
-  border-radius: 999px;
-  background: var(--range-track);
-}
+/* ------------------ RANGE (fix Edge / mantém gradiente inline) ------------------ */
 
-.pr-range::-webkit-slider-runnable-track {
-  height: 4px; /* antes 6 */
-  border-radius: 999px;
-  background: transparent;
-}
-
-.pr-range::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 14px;   /* antes 16 */
-  height: 14px;  /* antes 16 */
-  border-radius: 999px;
-  background: var(--range-fill);
-  border: 2px solid var(--surface);
-  margin-top: -5px;
-  box-shadow: 0 1px 6px rgba(0,0,0,0.15);
-}
-
-.pr-range::-moz-range-track {
-  height: 4px;
-  border-radius: 999px;
-  background: var(--range-track);
-}
-
-.pr-range::-moz-range-progress {
-  height: 4px;
-  border-radius: 999px;
-  background: var(--range-fill);
-}
-
-.pr-range::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
-  border-radius: 999px;
-  background: var(--range-fill);
-  border: 2px solid var(--surface);
-}
-
-/* --- FORCE range thin (Chrome/Edge/Safari/Firefox) --- */
+/* Base: deixa o background do input controlado pelo style={{background: bg}} */
 input[type="range"].pr-range {
   -webkit-appearance: none !important;
   appearance: none !important;
+  width: 100% !important;
   height: 14px !important;
   padding: 0 !important;
   margin: 0 !important;
-  background: var(--range-track) !important; /* fallback */
+  border-radius: 999px !important;
+
+  /* impede Edge aplicar accent-color azul no range */
+  accent-color: transparent;
+
+  /* fallback caso o inline falhe */
+  background: var(--range-track);
 }
 
-
-/* WebKit track */
+/* WebKit track: transparente para aparecer o gradiente no próprio input */
 input[type="range"].pr-range::-webkit-slider-runnable-track {
   -webkit-appearance: none !important;
-  height: 3px !important;          /* MAIS FINO */
+  height: 3px !important;
   border-radius: 999px !important;
-  background: transparent !important; /* fill vem inline */
+  background: transparent !important;
 }
 
 /* WebKit thumb */
@@ -177,20 +118,20 @@ input[type="range"].pr-range::-webkit-slider-thumb {
   border-radius: 999px !important;
   background: var(--range-fill) !important;
   border: 2px solid var(--surface) !important;
-  margin-top: -4.5px !important;   /* centraliza no track de 3px */
+  margin-top: -4.5px !important;
   box-shadow: 0 1px 6px rgba(0, 0, 0, 0.15) !important;
 }
 
-/* Firefox track + progress + thumb */
+/* Firefox: também deixa o track transparente (gradiente fica no input) */
 input[type="range"].pr-range::-moz-range-track {
   height: 3px !important;
   border-radius: 999px !important;
-  background: var(--range-track) !important;
+  background: transparent !important;
 }
 input[type="range"].pr-range::-moz-range-progress {
   height: 3px !important;
   border-radius: 999px !important;
-  background: var(--range-fill) !important;
+  background: transparent !important;
 }
 input[type="range"].pr-range::-moz-range-thumb {
   width: 12px !important;

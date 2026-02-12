@@ -10,6 +10,55 @@ from .models import Position
 from .targets import TargetAllocation
 
 
+def build_weighted_targets(
+    positions: list[Position],
+    w_stock: float,
+    w_fii: float,
+    w_bond: float,
+    *,
+    include_tesouro: bool,
+) -> dict[str, float]:
+    """
+    - Pesos chegam em % (0..100)
+    - Divide o peso de cada classe igualmente entre os tickers daquela classe
+    - Se include_tesouro=False => BOND recebe 0 e é removido da normalização
+    """
+    weights_by_type = {
+        "STOCK": max(0.0, float(w_stock)),
+        "FII": max(0.0, float(w_fii)),
+        "BOND": max(0.0, float(w_bond)) if include_tesouro else 0.0,
+    }
+
+    tickers_by_type: dict[str, list[str]] = defaultdict(list)
+    for p in positions:
+        t = (p.ticker or "").strip().upper()
+        if not t:
+            continue
+        at = _norm_type(p.asset_type)
+
+        tickers_by_type[at].append(t)
+
+    active_types = [
+        k for k, v in weights_by_type.items() if v > 0 and tickers_by_type.get(k)
+    ]
+    if not active_types:
+        # fallback: default equal por tipo/ticker
+        default = build_default_targets(positions, include_tesouro=include_tesouro)
+        return dict(default.by_ticker.weights_by_ticker)
+
+    total_w = sum(weights_by_type[t] for t in active_types)
+
+    out: dict[str, float] = {}
+    for t in active_types:
+        cls_w = weights_by_type[t] / total_w  # 0..1
+        tickers = sorted(set(tickers_by_type[t]))
+        per_ticker = cls_w / len(tickers)
+        for ticker in tickers:
+            out[ticker] = per_ticker
+
+    return out
+
+
 @dataclass(frozen=True)
 class DefaultTargets:
     # total weight per ticker (sums to 1.0)
@@ -27,11 +76,31 @@ def _norm_ticker(x: str) -> str:
 
 
 def _norm_type(x: str) -> str:
-    x = (x or "").strip().upper()
-    return x if x else "UNKNOWN"
+    s = (x or "").strip().upper()
+    s = s.replace("Ç", "C").replace("Ã", "A").replace("Á", "A").replace("Â", "A")
+    s = s.replace("É", "E").replace("Ê", "E").replace("Í", "I")
+    s = s.replace("Ó", "O").replace("Ô", "O").replace("Õ", "O")
+    s = s.replace("Ú", "U")
+
+    if s in {"STOCK", "ACAO", "ACOES", "EQUITY", "BR_STOCK"}:
+        return "STOCK"
+    if s in {"FII", "FIIS", "REIT"}:
+        return "FII"
+    if s in {"BOND", "TESOURO", "TESOURO DIRETO", "RF", "RENDA FIXA"}:
+        return "BOND"
+
+    return s
 
 
-def build_default_targets(positions: Iterable[Position]) -> DefaultTargets:
+def build_default_targets(
+    positions: Iterable[Position],
+    *,
+    include_tesouro: bool = True,
+) -> DefaultTargets:
+    # opcional: filtra Tesouro quando include_tesouro=False
+    if not include_tesouro:
+        positions = [p for p in positions if _norm_type(p.asset_type) != "BOND"]
+
     # unique tickers per type
     tickers_by_type: dict[str, list[str]] = defaultdict(list)
     asset_type_by_ticker: dict[str, str] = {}
@@ -40,7 +109,6 @@ def build_default_targets(positions: Iterable[Position]) -> DefaultTargets:
         tkr = _norm_ticker(p.ticker)
         at = _norm_type(p.asset_type)
 
-        # detect conflicting types for same ticker
         prev = asset_type_by_ticker.get(tkr)
         if prev is not None and prev != at:
             raise ValueError(
@@ -66,7 +134,6 @@ def build_default_targets(positions: Iterable[Position]) -> DefaultTargets:
     weights_total: dict[str, float] = {}
     weights_within: dict[str, float] = {}
 
-    # deterministic order
     for at in types:
         tickers = sorted(tickers_by_type[at])
         w_within = 1.0 / float(len(tickers))
@@ -74,7 +141,6 @@ def build_default_targets(positions: Iterable[Position]) -> DefaultTargets:
             weights_within[tkr] = w_within
             weights_total[tkr] = type_weight * w_within
 
-    # Make sum exactly 1.0 (avoid tiny float drift)
     s = sum(weights_total.values())
     if weights_total and abs(s - 1.0) > 1e-12:
         for k in list(weights_total.keys()):

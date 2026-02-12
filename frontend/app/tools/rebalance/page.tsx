@@ -1,12 +1,18 @@
+/* page.tsx */
 "use client";
 
+
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AllocationSliders, type AllocationWeights } from "../../components/AllocationSliders";
+import {
+  AllocationSliders,
+  type AllocationWeights,
+} from "../../components/AllocationSliders";
 import {
   createRebalanceB3Job,
   getJob,
   type JobStatusResponse,
   type RebalanceResult,
+  importB3, // ✅
 } from "@/lib/api";
 import { SummaryCards } from "../../components/SummaryCards";
 import { TradesTable } from "../../components/TradesTable";
@@ -70,8 +76,22 @@ type AssetClass = "stocks" | "fiis" | "bonds";
 
 function classifyTicker(ticker: string): AssetClass {
   const t = ticker.toUpperCase().trim();
+
+  // FIIs geralmente terminam em 11
   if (/11$/.test(t)) return "fiis";
-  if (t.includes("TESOURO") || t.startsWith("LFT") || t.startsWith("LTN") || t.startsWith("NTN")) return "bonds";
+
+  // Tesouro via ISIN B3 (ex.: BRSTNCLF1RE0)
+  if (t.startsWith("BRSTN")) return "bonds";
+
+  // fallback textual
+  if (
+    t.includes("TESOURO") ||
+    t.startsWith("LFT") ||
+    t.startsWith("LTN") ||
+    t.startsWith("NTN")
+  )
+    return "bonds";
+
   return "stocks";
 }
 
@@ -100,7 +120,13 @@ function readSummary(obj: unknown): Summary | null {
   const s = obj.summary;
   if (!isObject(s)) return null;
 
-  const required = ["cash_before", "cash_after", "total_value_before", "total_value_after", "n_trades"] as const;
+  const required = [
+    "cash_before",
+    "cash_after",
+    "total_value_before",
+    "total_value_after",
+    "n_trades",
+  ] as const;
   for (const k of required) if (typeof s[k] !== "number") return null;
 
   return s as Summary;
@@ -114,21 +140,18 @@ function readTrades(obj: unknown): Trade[] {
 }
 
 function fmtMoney(n: number) {
-  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n);
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(n);
 }
 function fmtQty(n: number) {
   return new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 8 }).format(n);
 }
 function fmtPct(n: number) {
-  return new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }).format(n) + "%";
-}
-
-function sumValues(rows: HoldingRow[]): number {
-  return rows.reduce((acc, r) => {
-    if (typeof r.value === "number") return acc + r.value;
-    if (typeof r.price === "number") return acc + r.quantity * r.price;
-    return acc;
-  }, 0);
+  return (
+    new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }).format(n) + "%"
+  );
 }
 
 function allocationFromHoldings(rows: HoldingRow[]) {
@@ -162,7 +185,8 @@ function allocationFromHoldings(rows: HoldingRow[]) {
 function ActionBadge(props: { action: "BUY" | "SELL" | "—" }) {
   const a = props.action;
 
-  if (a === "—") return <span className="text-xs text-[var(--text-muted)]">—</span>;
+  if (a === "—")
+    return <span className="text-xs text-[var(--text-muted)]">—</span>;
 
   const cls =
     a === "BUY"
@@ -170,7 +194,9 @@ function ActionBadge(props: { action: "BUY" | "SELL" | "—" }) {
       : "bg-[color:var(--sell)]/20 text-[color:var(--sell)] border-[color:var(--sell)]/30";
 
   return (
-    <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold ${cls}`}>
+    <span
+      className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold ${cls}`}
+    >
       {a}
     </span>
   );
@@ -188,23 +214,31 @@ function AllocationBreakdownCard(props: { title: string; rows: HoldingRow[] }) {
   return (
     <div className="bg-[var(--surface-alt)] border border-[var(--border)] rounded-xl p-3">
       <div className="flex items-baseline justify-between mb-2">
-        <div className="text-xs font-semibold text-[var(--text-primary)]">{props.title}</div>
+        <div className="text-xs font-semibold text-[var(--text-primary)]">
+          {props.title}
+        </div>
         <div className="text-[11px] text-[var(--text-muted)]">
-          Total: <span className="font-mono text-[var(--text-primary)]">{fmtMoney(data.total)}</span>
+          Total:{" "}
+          <span className="font-mono text-[var(--text-primary)]">
+            {fmtMoney(data.total)}
+          </span>
         </div>
       </div>
 
       <div className="grid grid-cols-3 gap-2">
         {items.map((it) => (
-          <div key={it.key} className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-2">
-            <div className="text-[11px] text-[var(--text-muted)]">{it.label}</div>
-            <div className="font-mono text-sm text-[var(--text-primary)]">{fmtPct(data.pct[it.key])}</div>
+          <div
+            key={it.key}
+            className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-2"
+          >
+            <div className="text-[11px] text-[var(--text-muted)]">
+              {it.label}
+            </div>
+            <div className="font-mono text-sm text-[var(--text-primary)]">
+              {fmtPct(data.pct[it.key])}
+            </div>
           </div>
         ))}
-      </div>
-
-      <div className="mt-2 text-[11px] text-[var(--text-muted)]">
-        *Heurística: FIIs terminam em “11”. Ajuste quando o backend enviar o tipo.
       </div>
     </div>
   );
@@ -216,7 +250,11 @@ function HoldingsBeforeTable(props: {
   holdings: HoldingRow[];
   syncId: string;
 }) {
-  const total = useMemo(() => props.rows.reduce((acc, r) => acc + (r.before.value ?? 0), 0), [props.rows]);
+  const total = useMemo(
+    () =>
+      props.rows.reduce((acc: number, r: UnifiedRow) => acc + (r.before.value ?? 0), 0),
+    [props.rows],
+  );
   const bodyRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -226,17 +264,21 @@ function HoldingsBeforeTable(props: {
   return (
     <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-4 flex flex-col h-full">
       <div className="flex items-baseline justify-between mb-3">
-        <h3 className="font-semibold text-[var(--text-primary)]">{props.title}</h3>
+        <h3 className="font-semibold text-[var(--text-primary)]">
+          {props.title}
+        </h3>
         <div className="text-xs text-[var(--text-muted)]">
-          Total: <span className="font-mono text-[var(--text-primary)]">{fmtMoney(total)}</span>
+          Total:{" "}
+          <span className="font-mono text-[var(--text-primary)]">
+            {fmtMoney(total)}
+          </span>
         </div>
       </div>
 
       <div
         ref={bodyRef}
         onScroll={() => syncScroll(props.syncId, "a")}
-        className="overflow-x-auto overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--surface-alt)]
-                   h-[520px]"
+        className="overflow-x-auto overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] h-[520px]"
       >
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[var(--surface-alt)]">
@@ -249,21 +291,35 @@ function HoldingsBeforeTable(props: {
           </thead>
           <tbody>
             {props.rows.map((r) => (
-              <tr key={r.ticker} className="border-b border-[var(--border)] last:border-b-0">
-                <td className="py-2 pr-3 font-mono text-[var(--text-primary)]">{r.ticker}</td>
-                <td className="py-2 pr-3 font-mono text-[var(--text-primary)]">{fmtQty(r.before.quantity)}</td>
+              <tr
+                key={r.ticker}
+                className="border-b border-[var(--border)] last:border-b-0"
+              >
                 <td className="py-2 pr-3 font-mono text-[var(--text-primary)]">
-                  {typeof r.before.price === "number" ? fmtMoney(r.before.price) : "—"}
+                  {r.ticker}
                 </td>
                 <td className="py-2 pr-3 font-mono text-[var(--text-primary)]">
-                  {typeof r.before.value === "number" ? fmtMoney(r.before.value) : "—"}
+                  {fmtQty(r.before.quantity)}
+                </td>
+                <td className="py-2 pr-3 font-mono text-[var(--text-primary)]">
+                  {typeof r.before.price === "number"
+                    ? fmtMoney(r.before.price)
+                    : "—"}
+                </td>
+                <td className="py-2 pr-3 font-mono text-[var(--text-primary)]">
+                  {typeof r.before.value === "number"
+                    ? fmtMoney(r.before.value)
+                    : "—"}
                 </td>
               </tr>
             ))}
 
             {props.rows.length === 0 && (
               <tr>
-                <td colSpan={4} className="py-6 text-center text-[var(--text-muted)]">
+                <td
+                  colSpan={4}
+                  className="py-6 text-center text-[var(--text-muted)]"
+                >
                   Sem dados.
                 </td>
               </tr>
@@ -273,7 +329,10 @@ function HoldingsBeforeTable(props: {
       </div>
 
       <div className="mt-3">
-        <AllocationBreakdownCard title="Distribuição (antes)" rows={props.holdings} />
+        <AllocationBreakdownCard
+          title="Distribuição (antes)"
+          rows={props.holdings}
+        />
       </div>
     </div>
   );
@@ -285,7 +344,11 @@ function HoldingsAfterTable(props: {
   holdings: HoldingRow[];
   syncId: string;
 }) {
-  const total = useMemo(() => props.rows.reduce((acc, r) => acc + (r.after.value ?? 0), 0), [props.rows]);
+  const total = useMemo(
+    () =>
+      props.rows.reduce((acc: number, r: UnifiedRow) => acc + (r.after.value ?? 0), 0),
+    [props.rows],
+  );
   const bodyRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -295,17 +358,21 @@ function HoldingsAfterTable(props: {
   return (
     <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-4 flex flex-col h-full">
       <div className="flex items-baseline justify-between mb-3">
-        <h3 className="font-semibold text-[var(--text-primary)]">{props.title}</h3>
+        <h3 className="font-semibold text-[var(--text-primary)]">
+          {props.title}
+        </h3>
         <div className="text-xs text-[var(--text-muted)]">
-          Total: <span className="font-mono text-[var(--text-primary)]">{fmtMoney(total)}</span>
+          Total:{" "}
+          <span className="font-mono text-[var(--text-primary)]">
+            {fmtMoney(total)}
+          </span>
         </div>
       </div>
 
       <div
         ref={bodyRef}
         onScroll={() => syncScroll(props.syncId, "b")}
-        className="overflow-x-auto overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--surface-alt)]
-                   h-[520px]"
+        className="overflow-x-auto overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] h-[520px]"
       >
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[var(--surface-alt)]">
@@ -319,24 +386,38 @@ function HoldingsAfterTable(props: {
           </thead>
           <tbody>
             {props.rows.map((r) => (
-              <tr key={r.ticker} className="border-b border-[var(--border)] last:border-b-0">
-                <td className="py-2 pr-3 font-mono text-[var(--text-primary)]">{r.ticker}</td>
+              <tr
+                key={r.ticker}
+                className="border-b border-[var(--border)] last:border-b-0"
+              >
+                <td className="py-2 pr-3 font-mono text-[var(--text-primary)]">
+                  {r.ticker}
+                </td>
                 <td className="py-2 pr-3">
                   <ActionBadge action={r.action} />
                 </td>
-                <td className="py-2 pr-3 font-mono text-[var(--text-primary)]">{fmtQty(r.after.quantity)}</td>
                 <td className="py-2 pr-3 font-mono text-[var(--text-primary)]">
-                  {typeof r.after.price === "number" ? fmtMoney(r.after.price) : "—"}
+                  {fmtQty(r.after.quantity)}
                 </td>
                 <td className="py-2 pr-3 font-mono text-[var(--text-primary)]">
-                  {typeof r.after.value === "number" ? fmtMoney(r.after.value) : "—"}
+                  {typeof r.after.price === "number"
+                    ? fmtMoney(r.after.price)
+                    : "—"}
+                </td>
+                <td className="py-2 pr-3 font-mono text-[var(--text-primary)]">
+                  {typeof r.after.value === "number"
+                    ? fmtMoney(r.after.value)
+                    : "—"}
                 </td>
               </tr>
             ))}
 
             {props.rows.length === 0 && (
               <tr>
-                <td colSpan={5} className="py-6 text-center text-[var(--text-muted)]">
+                <td
+                  colSpan={5}
+                  className="py-6 text-center text-[var(--text-muted)]"
+                >
                   Sem dados.
                 </td>
               </tr>
@@ -346,7 +427,10 @@ function HoldingsAfterTable(props: {
       </div>
 
       <div className="mt-3">
-        <AllocationBreakdownCard title="Distribuição (depois)" rows={props.holdings} />
+        <AllocationBreakdownCard
+          title="Distribuição (depois)"
+          rows={props.holdings}
+        />
       </div>
     </div>
   );
@@ -356,7 +440,11 @@ function HoldingsAfterTable(props: {
 
 export default function RebalancePage() {
   const [file, setFile] = useState<File | null>(null);
+
+  // Cash: só faz sentido em BUY. Em SELL/TRADE vira 0 automaticamente.
   const [cash, setCash] = useState<number>(100);
+  const [lastBuyCash, setLastBuyCash] = useState<number>(100);
+
   const [mode, setMode] = useState<Mode>("BUY");
 
   const [weights, setWeights] = useState<AllocationWeights>({
@@ -388,7 +476,7 @@ export default function RebalancePage() {
     try {
       const created = await createRebalanceB3Job({
         file,
-        cash,
+        cash: mode === "BUY" ? cash : 0,
         mode,
         noTesouro: false,
         weights,
@@ -434,10 +522,33 @@ export default function RebalancePage() {
 
   const resultUnknown: unknown = job?.result ?? null;
 
-  const holdingsBefore = useMemo(() => readHoldingRows(resultUnknown, "holdings_before"), [resultUnknown]);
-  const holdingsAfter = useMemo(() => readHoldingRows(resultUnknown, "holdings_after"), [resultUnknown]);
+  const holdingsBefore = useMemo(
+    () => readHoldingRows(resultUnknown, "holdings_before"),
+    [resultUnknown],
+  );
+  const holdingsAfter = useMemo(
+    () => readHoldingRows(resultUnknown, "holdings_after"),
+    [resultUnknown],
+  );
+
+  // ✅ moved inside component (rules-of-hooks)
+  const holdingsTotalBefore = useMemo(() => {
+    return holdingsBefore.reduce((acc: number, r: HoldingRow) => {
+      return acc + (typeof r.value === "number" ? r.value : 0);
+    }, 0);
+  }, [holdingsBefore]);
+
+  const holdingsTotalAfter = useMemo(() => {
+    return holdingsAfter.reduce((acc: number, r: HoldingRow) => {
+      return acc + (typeof r.value === "number" ? r.value : 0);
+    }, 0);
+  }, [holdingsAfter]);
 
   const trades = useMemo(() => readTrades(resultUnknown), [resultUnknown]);
+  const summaryFromApi = useMemo(
+    () => readSummary(resultUnknown),
+    [resultUnknown],
+  );
 
   const unifiedRows: UnifiedRow[] = useMemo(() => {
     const eps = 1e-9;
@@ -481,40 +592,25 @@ export default function RebalancePage() {
     });
   }, [holdingsBefore, holdingsAfter]);
 
-  const summaryFromApi = useMemo(() => readSummary(resultUnknown), [resultUnknown]);
-
-  const totalsFromTables = useMemo(() => {
-    const before = sumValues(holdingsBefore);
-    const after = sumValues(holdingsAfter);
-    return { before, after };
-  }, [holdingsBefore, holdingsAfter]);
-
-  const summaryFixed: Summary | null = useMemo(() => {
-    if (!summaryFromApi) return null;
-
-    const hasBefore = totalsFromTables.before > 0;
-    const hasAfter = totalsFromTables.after > 0;
-
-    return {
-      ...summaryFromApi,
-      total_value_before: hasBefore ? totalsFromTables.before : summaryFromApi.total_value_before,
-      total_value_after: hasAfter ? totalsFromTables.after : summaryFromApi.total_value_after,
-    };
-  }, [summaryFromApi, totalsFromTables]);
-
   const hasHoldings = holdingsBefore.length > 0 || holdingsAfter.length > 0;
 
   return (
     <main className="space-y-6">
       <div className="flex items-baseline justify-between">
-        <h1 className="text-2xl font-semibold text-[var(--text-primary)]">Portfolio Rebalancer</h1>
-        <div className="text-sm text-[var(--text-muted)]">B3 XLSX → trades + relatório</div>
+        <h1 className="text-2xl font-semibold text-[var(--text-primary)]">
+          Portfolio Rebalancer
+        </h1>
+        <div className="text-sm text-[var(--text-muted)]">
+          B3 XLSX → trades + relatório
+        </div>
       </div>
 
       <section className="grid grid-cols-1 lg:grid-cols-5 gap-4">
         <div className="lg:col-span-3 bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5 space-y-4">
           <div className="space-y-2">
-            <label className="block text-sm font-medium text-[var(--text-primary)]">Arquivo B3 (XLSX)</label>
+            <label className="block text-sm font-medium text-[var(--text-primary)]">
+              Arquivo B3 (XLSX)
+            </label>
 
             <div className="flex items-center gap-3">
               <label
@@ -526,9 +622,45 @@ export default function RebalancePage() {
                 <input
                   type="file"
                   accept=".xlsx"
-                  onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                  onChange={async (e) => {
+                    const f = e.target.files?.[0] ?? null;
+                    setFile(f);
+
+                    if (!f) return;
+
+                    // limpa estado anterior
+                    setErr(null);
+                    setJob(null);
+                    setJobId(null);
+
+                    try {
+                      const data = await importB3({ file: f, noTesouro: false });
+
+                      // ✅ ajusta sliders com o peso atual do portfolio
+                      if (data.weights_current) {
+                        // garante soma 100 caso venha com drift
+                        const s = Number(data.weights_current.stocks ?? 0);
+                        const fi = Number(data.weights_current.fiis ?? 0);
+                        const b = Number(data.weights_current.bonds ?? 0);
+                        const sum = s + fi + b;
+
+                        if (sum > 0) {
+                          const ns = Math.round((s / sum) * 100);
+                          const nfi = Math.round((fi / sum) * 100);
+                          let nb = 100 - ns - nfi; // força fechar em 100
+                          if (nb < 0) nb = 0;
+
+                          setWeights({ stocks: ns, fiis: nfi, bonds: nb });
+                        }
+                      }
+                    } catch (err: unknown) {
+                      const msg = err instanceof Error ? err.message : String(err);
+                      setErr(msg);
+                    }
+                  }}
                   className="hidden"
                 />
+
               </label>
 
               <div className="min-w-0 flex-1">
@@ -537,7 +669,9 @@ export default function RebalancePage() {
                     <span className="font-mono">{file.name}</span>
                   </div>
                 ) : (
-                  <div className="text-sm text-[var(--text-muted)]">Nenhum arquivo selecionado</div>
+                  <div className="text-sm text-[var(--text-muted)]">
+                    Nenhum arquivo selecionado
+                  </div>
                 )}
               </div>
             </div>
@@ -555,22 +689,41 @@ export default function RebalancePage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-2">
-              <label className="block text-sm font-medium text-[var(--text-primary)]">Cash</label>
+              <label className="block text-sm font-medium text-[var(--text-primary)]">
+                Cash
+              </label>
               <input
                 type="number"
                 value={cash}
-                onChange={(e) => setCash(Number(e.target.value))}
+                disabled={mode !== "BUY"}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  setCash(v);
+                  if (mode === "BUY") setLastBuyCash(v);
+                }}
                 className="w-full h-10 rounded-lg border border-[var(--border)] bg-[var(--surface-alt)]
                            px-3 text-sm text-[var(--text-primary)] outline-none
-                           focus:ring-2 focus:ring-[var(--border)]"
+                           focus:ring-2 focus:ring-[var(--border)]
+                           disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
 
             <div className="space-y-2">
-              <label className="block text-sm font-medium text-[var(--text-primary)]">Mode</label>
+              <label className="block text-sm font-medium text-[var(--text-primary)]">
+                Mode
+              </label>
               <select
                 value={mode}
-                onChange={(e) => setMode(e.target.value as Mode)}
+                onChange={(e) => {
+                  const next = e.target.value as Mode;
+                  setMode(next);
+
+                  if (next === "BUY") {
+                    setCash(lastBuyCash);
+                  } else {
+                    setCash(0);
+                  }
+                }}
                 className="w-full h-10 rounded-lg border border-[var(--border)] bg-[var(--surface-alt)]
                            px-3 text-sm text-[var(--text-primary)] outline-none"
               >
@@ -609,7 +762,9 @@ export default function RebalancePage() {
 
         <div className="lg:col-span-2 bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5">
           <div className="mb-3">
-            <div className="text-sm font-semibold text-[var(--text-primary)]">Alocação alvo</div>
+            <div className="text-sm font-semibold text-[var(--text-primary)]">
+              Alocação alvo
+            </div>
           </div>
           <AllocationSliders value={weights} onChange={setWeights} />
         </div>
@@ -617,19 +772,27 @@ export default function RebalancePage() {
 
       {job?.status === "error" && job.error && (
         <section className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5">
-          <h2 className="font-semibold text-[var(--text-primary)] mb-2">Erro do cálculo</h2>
+          <h2 className="font-semibold text-[var(--text-primary)] mb-2">
+            Erro do cálculo
+          </h2>
           <pre className="text-xs whitespace-pre-wrap rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] p-3 text-[var(--text-muted)] overflow-x-auto">
             {JSON.stringify(job.error, null, 2)}
           </pre>
         </section>
       )}
 
-      {job?.status === "done" && summaryFixed && (
+      {job?.status === "done" && summaryFromApi && (
         <section className="space-y-4">
           <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5">
-            <h2 className="font-semibold text-[var(--text-primary)] mb-3">Summary</h2>
+            <h2 className="font-semibold text-[var(--text-primary)] mb-3">
+              Summary
+            </h2>
             <div className="grid items-stretch">
-              <SummaryCards summary={summaryFixed} />
+              <SummaryCards
+                summary={summaryFromApi}
+                holdingsTotalBefore={holdingsTotalBefore}
+                holdingsTotalAfter={holdingsTotalAfter}
+              />
             </div>
           </div>
 
@@ -651,8 +814,14 @@ export default function RebalancePage() {
           {!hasHoldings && (
             <div className="text-xs text-[var(--text-muted)]">
               ⚠️ As tabelas dependem do backend retornar{" "}
-              <span className="font-mono text-[var(--text-primary)]">holdings_before</span> e{" "}
-              <span className="font-mono text-[var(--text-primary)]">holdings_after</span>.
+              <span className="font-mono text-[var(--text-primary)]">
+                holdings_before
+              </span>{" "}
+              e{" "}
+              <span className="font-mono text-[var(--text-primary)]">
+                holdings_after
+              </span>
+              .
             </div>
           )}
 

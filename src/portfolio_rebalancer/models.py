@@ -103,3 +103,17 @@ class Portfolio:
             return {}
         vals = self.value_by_ticker()
         return {ticker: value / total for ticker, value in vals.items()}
+
+    def value_by_asset_type(self) -> dict[str, float]:
+        out: dict[str, float] = {}
+        for p in self.positions:
+            at = str(p.asset_type).strip().upper()
+            out[at] = out.get(at, 0.0) + float(p.market_value)
+        return out
+
+    def weights_by_asset_type(self) -> dict[str, float]:
+        total = float(self.total_value())
+        if total <= 0:
+            return {}
+        vals = self.value_by_asset_type()
+        return {k: float(v) / total for k, v in vals.items()}

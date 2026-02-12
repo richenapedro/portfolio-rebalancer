@@ -196,24 +196,9 @@ def rebalance(
     allow_fractional: bool = False,
     min_trade_notional: float = 0.0,
 ) -> RebalanceResult:
-    mode_norm = mode.strip().upper()
+    mode_norm = str(mode).strip().upper()
     if mode_norm not in {"BUY", "TRADE", "SELL"}:
         raise ValueError("mode must be one of: BUY, TRADE, SELL")
-
-    cash = float(portfolio.cash)
-    total_value = float(portfolio.total_value())
-
-    current_values = portfolio.value_by_ticker()
-    universe = set(current_values.keys()) | set(target.weights_by_ticker.keys())
-
-    target_values: dict[str, float] = {
-        t: total_value * target.weight(t) for t in universe
-    }
-    deltas: dict[str, float] = {
-        t: target_values[t] - float(current_values.get(t, 0.0)) for t in universe
-    }
-
-    qty_by_ticker = {p.ticker: float(p.quantity) for p in portfolio.positions}
 
     def _need_price(ticker: str) -> float:
         if ticker not in prices:
@@ -223,13 +208,38 @@ def rebalance(
             raise ValueError(f"price must be > 0 for ticker: {ticker}")
         return px
 
+    cash = float(portfolio.cash)
+
+    # quantities
+    qty_by_ticker = {p.ticker: float(p.quantity) for p in portfolio.positions}
+
+    # ✅ current values computed using *provided* prices
+    current_values: dict[str, float] = {}
+    for t, qty in qty_by_ticker.items():
+        if qty <= 0:
+            continue
+        px = _need_price(t)
+        current_values[t] = qty * px
+
+    # ✅ total value consistent with prices
+    total_value = float(sum(current_values.values()) + cash)
+
+    universe = set(current_values.keys()) | set(target.weights_by_ticker.keys())
+
+    target_values: dict[str, float] = {
+        t: total_value * float(target.weight(t)) for t in universe
+    }
+    deltas: dict[str, float] = {
+        t: target_values[t] - float(current_values.get(t, 0.0)) for t in universe
+    }
+
     trades: list[Trade] = []
     asset_type_by_ticker = _asset_type_map(portfolio)
 
     # ---------- SELL leg (SELL or TRADE) ----------
     if mode_norm in {"SELL", "TRADE"}:
         sell_items = [(t, d) for t, d in deltas.items() if d < 0]
-        sell_items.sort(key=lambda x: x[1])  # mais overweight primeiro
+        sell_items.sort(key=lambda x: x[1])  # mais negativo primeiro (mais overweight)
 
         for t, delta in sell_items:
             current_qty = qty_by_ticker.get(t, 0.0)
@@ -237,6 +247,7 @@ def rebalance(
                 continue
 
             price = _need_price(t)
+
             desired_qty = (-delta) / price
             qty = desired_qty if allow_fractional else _floor_shares(desired_qty)
             qty = min(qty, current_qty)
@@ -245,11 +256,16 @@ def rebalance(
                 continue
 
             notional = qty * price
-            if notional < min_trade_notional:
+            if notional < float(min_trade_notional):
                 continue
 
             trades.append(Trade(ticker=t, side="SELL", quantity=qty, price=price))
             cash += notional
+
+            # ✅ update state so BUY leg (in TRADE) sees the sell
+            current_values[t] = float(current_values.get(t, 0.0)) - notional
+            qty_by_ticker[t] = current_qty - qty
+            deltas[t] = target_values[t] - current_values.get(t, 0.0)
 
     # ---------- BUY leg (BUY or TRADE) ----------
     if mode_norm in {"BUY", "TRADE"}:
@@ -261,10 +277,12 @@ def rebalance(
             prices=prices,
             asset_type_by_ticker=asset_type_by_ticker,
             allow_fractional=allow_fractional,
-            min_trade_notional=min_trade_notional,
+            min_trade_notional=float(min_trade_notional),
         )
         trades.extend(buy_trades)
 
     return RebalanceResult(
-        trades=trades, cash_before=float(portfolio.cash), cash_after=cash
+        trades=trades,
+        cash_before=float(portfolio.cash),
+        cash_after=float(cash),
     )
