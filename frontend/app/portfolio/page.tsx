@@ -1,6 +1,5 @@
 /* page.tsx */
 "use client";
-
 import { useEffect, useMemo, useRef, useState } from "react";
 // /mnt/data/page.tsx
 import {
@@ -94,7 +93,7 @@ function pickDefaultName(metaFilename?: string, fileName?: string) {
 
 function summarizeMeta(meta?: ImportResponse["meta"] | null, manualCount?: number) {
   const m = manualCount ?? 0;
-  if (!meta) return m ? `${m} itens adicionados manualmente` : "Importe um XLSX da B3 ou adicione manualmente";
+  if (!meta) return m ? `${m} itens adicionados manualmente` : "";
 
   const a = meta.n_positions ?? 0;
   const b = meta.n_prices ?? 0;
@@ -751,7 +750,7 @@ export default function PortfolioPage() {
                   </button>
                 </div>
 
-                <div className="text-xs text-[var(--text-muted)]">Sugestões vêm do backend (/api/bd_remote/symbols).</div>
+
               </div>
             </div>
           </div>
@@ -767,41 +766,71 @@ export default function PortfolioPage() {
           </div>
 
 
-          <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5 space-y-2">
+        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5 space-y-3">
+          <div className="flex items-center justify-between">
             <div className="text-sm font-semibold text-[var(--text-primary)]">Alocação atual</div>
 
+            {/* opcional: total de linhas */}
+            <div className="text-xs text-[var(--text-muted)]">
+              {holdings.length ? `${holdings.length} ativos` : "sem ativos"}
+            </div>
+          </div>
+
+          {holdings.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface-alt)] p-4 text-sm text-[var(--text-muted)]">
+              Nenhum ativo ainda. Importe um XLSX da B3 ou adicione manualmente para ver a alocação.
+            </div>
+          ) : (
             <div className="grid grid-cols-3 gap-3 text-sm">
               {totals.count.stocks > 0 ? (
-                <div className="relative rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] p-3">
-                  <div className="absolute right-2 top-2 text-[10px] px-2 py-0.5 rounded-full border border-[var(--border)] text-[var(--text-muted)]">
+                <div className="relative rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] p-3 transition">
+                  <div className="absolute right-2 top-2 text-[10px] px-2 py-0.5 rounded-full border border-[var(--border)] text-[var(--text-muted)] bg-[var(--surface)]/60">
                     {totals.count.stocks}
                   </div>
                   <div className="text-xs text-[var(--text-muted)]">Ações</div>
-                  <div className="mt-1 font-semibold">{fmtPct(totals.pctValue.stocks)}</div>
+                  <div className="mt-1 font-semibold text-[var(--text-primary)]">{fmtPct(totals.pctValue.stocks)}</div>
                 </div>
-              ) : null}
+              ) : (
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] p-3 opacity-50">
+                  <div className="text-xs text-[var(--text-muted)]">Ações</div>
+                  <div className="mt-1 font-semibold text-[var(--text-muted)]">0%</div>
+                </div>
+              )}
 
               {totals.count.fiis > 0 ? (
-                <div className="relative rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] p-3">
-                  <div className="absolute right-2 top-2 text-[10px] px-2 py-0.5 rounded-full border border-[var(--border)] text-[var(--text-muted)]">
+                <div className="relative rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] p-3 transition">
+                  <div className="absolute right-2 top-2 text-[10px] px-2 py-0.5 rounded-full border border-[var(--border)] text-[var(--text-muted)] bg-[var(--surface)]/60">
                     {totals.count.fiis}
                   </div>
                   <div className="text-xs text-[var(--text-muted)]">FIIs</div>
-                  <div className="mt-1 font-semibold">{fmtPct(totals.pctValue.fiis)}</div>
+                  <div className="mt-1 font-semibold text-[var(--text-primary)]">{fmtPct(totals.pctValue.fiis)}</div>
                 </div>
-              ) : null}
+              ) : (
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] p-3 opacity-50">
+                  <div className="text-xs text-[var(--text-muted)]">FIIs</div>
+                  <div className="mt-1 font-semibold text-[var(--text-muted)]">0%</div>
+                </div>
+              )}
 
               {totals.count.bonds > 0 ? (
-                <div className="relative rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] p-3">
-                  <div className="absolute right-2 top-2 text-[10px] px-2 py-0.5 rounded-full border border-[var(--border)] text-[var(--text-muted)]">
+                <div className="relative rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] p-3 transition">
+                  <div className="absolute right-2 top-2 text-[10px] px-2 py-0.5 rounded-full border border-[var(--border)] text-[var(--text-muted)] bg-[var(--surface)]/60">
                     {totals.count.bonds}
                   </div>
                   <div className="text-xs text-[var(--text-muted)]">RF</div>
-                  <div className="mt-1 font-semibold">{fmtPct(totals.pctValue.bonds)}</div>
+                  <div className="mt-1 font-semibold text-[var(--text-primary)]">{fmtPct(totals.pctValue.bonds)}</div>
                 </div>
-              ) : null}
+              ) : (
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] p-3 opacity-50">
+                  <div className="text-xs text-[var(--text-muted)]">RF</div>
+                  <div className="mt-1 font-semibold text-[var(--text-muted)]">0%</div>
+                </div>
+              )}
             </div>
-          </div>
+          )}
+        </div>
+
+
 
         </div>
       </section>
@@ -869,22 +898,51 @@ export default function PortfolioPage() {
                       <td className="p-3 text-right text-[var(--text-primary)]">{fmtMoney(h.price)}</td>
                       <td className="p-3 text-right font-semibold text-[var(--text-primary)]">{fmtMoney(h.value)}</td>
 
-                      <td className="p-3 text-center">
-                        <input
-                          type="number"
-                          min={0}
-                          max={10}
-                          step={1}
-                          value={notesByTicker[(h.ticker ?? "").toUpperCase()] ?? 10}
-                          onChange={(e) => {
-                            const tk = (h.ticker ?? "").toUpperCase();
-                            const v = clampNote(Number(e.target.value));
-                            setNotesByTicker((prev) => ({ ...prev, [tk]: v }));
-                          }}
-                          className="w-16 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-sm text-center
-                                     text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-[var(--primary)]/30"
-                        />
-                      </td>
+<td className="p-3 text-center">
+  {(() => {
+    const tk = (h.ticker ?? "").toUpperCase();
+    const v = notesByTicker[tk] ?? 10;
+
+    return (
+      <div className="inline-flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => setNotesByTicker((prev) => ({ ...prev, [tk]: clampNote((prev[tk] ?? 10) - 1) }))}
+          className="h-8 w-8 rounded-lg border border-[var(--border)] bg-[var(--surface)]
+                     text-[var(--text-primary)] hover:bg-[var(--surface-alt)]"
+          aria-label="Diminuir nota"
+          title="Diminuir"
+        >
+          −
+        </button>
+
+        <input
+          type="number"
+          min={0}
+          max={10}
+          step={1}
+          value={v}
+          onChange={(e) => setNotesByTicker((prev) => ({ ...prev, [tk]: clampNote(Number(e.target.value)) }))}
+          className="w-14 h-8 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 text-sm text-center
+                     text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-[var(--primary)]/30
+                     [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+        />
+
+        <button
+          type="button"
+          onClick={() => setNotesByTicker((prev) => ({ ...prev, [tk]: clampNote((prev[tk] ?? 10) + 1) }))}
+          className="h-8 w-8 rounded-lg border border-[var(--border)] bg-[var(--surface)]
+                     text-[var(--text-primary)] hover:bg-[var(--surface-alt)]"
+          aria-label="Aumentar nota"
+          title="Aumentar"
+        >
+          +
+        </button>
+      </div>
+    );
+  })()}
+</td>
+
 
                       <td className="p-3 text-center">
                         <button
