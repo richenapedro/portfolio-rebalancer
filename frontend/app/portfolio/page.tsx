@@ -2,13 +2,13 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-
+// /mnt/data/page.tsx
 import {
-  getRemoteAssets,
-  getRemotePrices,
   importB3,
-  searchSymbols,
   type ImportResponse,
+  searchSymbols,
+  getRemotePrices,
+  getRemoteAssets,
   type RemoteAsset,
 } from "@/lib/api";
 
@@ -18,6 +18,7 @@ type Position = ImportResponse["positions"][number];
 type Holding = Position & {
   value: number;
   cls: AssetClass;
+  note: number; // 0..10
 };
 
 type PickedAsset = {
@@ -57,14 +58,8 @@ function fmtPct(n: number) {
 
 function Badge(props: { cls: AssetClass }) {
   const map: Record<AssetClass, { label: string; classes: string }> = {
-    stocks: {
-      label: "Ações",
-      classes: "bg-[color:var(--sell)]/15 text-[color:var(--sell)] border-[color:var(--sell)]/30",
-    },
-    fiis: {
-      label: "FIIs",
-      classes: "bg-[color:var(--buy)]/15 text-[color:var(--buy)] border-[color:var(--buy)]/30",
-    },
+    stocks: { label: "Ações", classes: "bg-[color:var(--sell)]/15 text-[color:var(--sell)] border-[color:var(--sell)]/30" },
+    fiis: { label: "FIIs", classes: "bg-[color:var(--buy)]/15 text-[color:var(--buy)] border-[color:var(--buy)]/30" },
     bonds: { label: "RF", classes: "bg-[var(--surface-alt)] text-[var(--text-muted)] border-[var(--border)]" },
     other: { label: "Outro", classes: "bg-[var(--surface-alt)] text-[var(--text-muted)] border-[var(--border)]" },
   };
@@ -89,6 +84,8 @@ function StatCard(props: { title: string; value: string; hint?: string }) {
 const LS_IMPORT_KEY = "portfolio:lastImport";
 const LS_NAME_KEY = "portfolio:portfolioName";
 const LS_MANUAL_KEY = "portfolio:manualPositions";
+const LS_NOTES_KEY = "portfolio:notesByTicker";
+const LS_REMOVED_KEY = "portfolio:removedTickers";
 
 function pickDefaultName(metaFilename?: string, fileName?: string) {
   const raw = (metaFilename || fileName || "Minha carteira").trim();
@@ -158,6 +155,13 @@ function ConfirmModal(props: {
   );
 }
 
+function clampNote(v: number) {
+  if (!Number.isFinite(v)) return 10;
+  if (v < 0) return 0;
+  if (v > 10) return 10;
+  return Math.round(v);
+}
+
 export default function PortfolioPage() {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
@@ -178,56 +182,45 @@ export default function PortfolioPage() {
 
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
 
-  // sugestões
+  // sugestões remotas
   const [remoteSug, setRemoteSug] = useState<string[]>([]);
   const [sugLoading, setSugLoading] = useState(false);
 
-  // loading do preço (overlay no input do ticker)
+  // loading do preço (somente overlay no input do ticker)
   const [priceLoading, setPriceLoading] = useState(false);
 
-  // index ticker->(price,cls)
   const [assetIndex, setAssetIndex] = useState<RemoteAsset[] | null>(null);
   const [assetIndexLoading, setAssetIndexLoading] = useState(false);
+
+  // notas/pesos + removidos
+  const [notesByTicker, setNotesByTicker] = useState<Record<string, number>>({});
+  const [removedTickers, setRemovedTickers] = useState<string[]>([]);
 
   const assetByTicker = useMemo(() => {
     const m = new Map<string, RemoteAsset>();
     for (const it of assetIndex ?? []) m.set(it.ticker.toUpperCase(), it);
     return m;
   }, [assetIndex]);
-  // ✅ quando o assetIndex carrega, corrige o picked (class/price) se ele foi selecionado antes do cache existir
-  useEffect(() => {
-    if (!picked) return;
 
-    const tk = picked.ticker.trim().toUpperCase();
-    const meta = assetByTicker.get(tk);
-    if (!meta) return;
+  const removedSet = useMemo(() => new Set(removedTickers.map((t) => t.toUpperCase())), [removedTickers]);
 
-    setPicked((prev) => {
-      if (!prev) return prev;
+  function removeTicker(ticker: string) {
+    const tk = ticker.trim().toUpperCase();
+    setRemovedTickers((prev) => (prev.includes(tk) ? prev : [...prev, tk]));
+  }
+  function restoreTicker(ticker: string) {
+    const tk = ticker.trim().toUpperCase();
+    setRemovedTickers((prev) => prev.filter((x) => x !== tk));
+  }
 
-      const nextClass = prev.asset_class === "other" ? meta.cls : prev.asset_class;
-      const nextPrice = prev.price ?? (meta.price ?? undefined);
-
-      // evita rerender desnecessário
-      if (nextClass === prev.asset_class && nextPrice === prev.price) return prev;
-
-      return { ...prev, asset_class: nextClass, price: nextPrice };
-    });
-
-    // se o usuário ainda não digitou preço manual, preenche pelo cache
-    if (!manualPrice.trim() && meta.price != null && Number.isFinite(meta.price)) {
-      setManualPrice(String(meta.price));
-    }
-  }, [assetByTicker, picked, manualPrice]);
-
-  // carrega index ao abrir a página
+  // /mnt/data/page.tsx
   useEffect(() => {
     let alive = true;
 
     (async () => {
       try {
         setAssetIndexLoading(true);
-        const res = await getRemoteAssets();
+        const res = await getRemoteAssets(); // ✅ 1 chamada só
         if (!alive) return;
         setAssetIndex(res.items);
       } catch (e) {
@@ -244,7 +237,7 @@ export default function PortfolioPage() {
     };
   }, []);
 
-  // restore last import + name + manual
+  // restore last import + name + manual + notes + removed
   useEffect(() => {
     try {
       const rawImport = localStorage.getItem(LS_IMPORT_KEY);
@@ -255,6 +248,12 @@ export default function PortfolioPage() {
 
       const rawManual = localStorage.getItem(LS_MANUAL_KEY);
       if (rawManual) setManualPositions(JSON.parse(rawManual) as Position[]);
+
+      const rawNotes = localStorage.getItem(LS_NOTES_KEY);
+      if (rawNotes) setNotesByTicker(JSON.parse(rawNotes) as Record<string, number>);
+
+      const rawRemoved = localStorage.getItem(LS_REMOVED_KEY);
+      if (rawRemoved) setRemovedTickers(JSON.parse(rawRemoved) as string[]);
     } catch {
       // ignore
     }
@@ -283,17 +282,30 @@ export default function PortfolioPage() {
     } catch {}
   }, [manualPositions]);
 
-  // buscar sugestões conforme digita (local primeiro, fallback remoto)
+  // persist notes
+  useEffect(() => {
+    try {
+      localStorage.setItem(LS_NOTES_KEY, JSON.stringify(notesByTicker));
+    } catch {}
+  }, [notesByTicker]);
+
+  // persist removed
+  useEffect(() => {
+    try {
+      localStorage.setItem(LS_REMOVED_KEY, JSON.stringify(removedTickers));
+    } catch {}
+  }, [removedTickers]);
+
+  // ✅ buscar sugestões conforme digita (debounce)
   useEffect(() => {
     const query = q.trim().toUpperCase();
-
-    // se já escolheu (e você formata "TICKER — nome"), não refaça sugestões
     if (picked && q.includes("—")) return;
 
     const t = window.setTimeout(async () => {
       try {
         setSugLoading(true);
 
+        // ✅ se já temos o index, autocomplete é local (zero lag)
         if (assetIndex && assetIndex.length > 0) {
           if (!query) {
             setRemoteSug(assetIndex.slice(0, 8).map((x) => x.ticker));
@@ -315,6 +327,7 @@ export default function PortfolioPage() {
           return;
         }
 
+        // fallback remoto (se index não carregou)
         const items = await searchSymbols(query, 8);
         setRemoteSug(items);
       } catch {
@@ -327,36 +340,49 @@ export default function PortfolioPage() {
     return () => window.clearTimeout(t);
   }, [q, picked, assetIndex]);
 
-  // positions = import + manual
+  // positions = import + manual, removendo tickers deletados
   const allPositions: Position[] = useMemo(() => {
-    return [...(data?.positions ?? []), ...manualPositions];
-  }, [data?.positions, manualPositions]);
+    const merged = [...(data?.positions ?? []), ...manualPositions];
+    return merged.filter((p) => !removedSet.has((p.ticker ?? "").toUpperCase()));
+  }, [data?.positions, manualPositions, removedSet]);
 
   const holdings: Holding[] = useMemo(() => {
     return allPositions
       .map((p) => {
         const value = (p.quantity ?? 0) * (p.price ?? 0);
         const cls = mapAssetTypeToClass(p.asset_type);
-        return { ...p, value, cls };
+
+        const tk = (p.ticker ?? "").toUpperCase();
+        const note = clampNote(notesByTicker[tk] ?? 10);
+
+        return { ...p, value, cls, note };
       })
       .sort((a, b) => b.value - a.value);
-  }, [allPositions]);
+  }, [allPositions, notesByTicker]);
 
+  // /mnt/data/page.tsx
   const totals = useMemo(() => {
-    const by: Record<AssetClass, number> = { stocks: 0, fiis: 0, bonds: 0, other: 0 };
-    let total = 0;
+    const byValue: Record<AssetClass, number> = { stocks: 0, fiis: 0, bonds: 0, other: 0 };
+    const count: Record<AssetClass, number> = { stocks: 0, fiis: 0, bonds: 0, other: 0 };
+
+    let totalValue = 0;
+
     for (const h of holdings) {
-      by[h.cls] += h.value;
-      total += h.value;
+      byValue[h.cls] += h.value;
+      totalValue += h.value;
+      count[h.cls] += 1;
     }
-    const pct: Record<AssetClass, number> = {
-      stocks: total ? (by.stocks / total) * 100 : 0,
-      fiis: total ? (by.fiis / total) * 100 : 0,
-      bonds: total ? (by.bonds / total) * 100 : 0,
-      other: total ? (by.other / total) * 100 : 0,
+
+    const pctValue: Record<AssetClass, number> = {
+      stocks: totalValue ? (byValue.stocks / totalValue) * 100 : 0,
+      fiis: totalValue ? (byValue.fiis / totalValue) * 100 : 0,
+      bonds: totalValue ? (byValue.bonds / totalValue) * 100 : 0,
+      other: totalValue ? (byValue.other / totalValue) * 100 : 0,
     };
-    return { by, pct, total };
+
+    return { byValue, totalValue, pctValue, count };
   }, [holdings]);
+
 
   const [tab, setTab] = useState<"all" | AssetClass>("all");
 
@@ -379,8 +405,6 @@ export default function PortfolioPage() {
     return holdings.filter((h) => h.cls === tab);
   }, [holdings, tab]);
 
-  const useDynamicWeights = manualPositions.length > 0 || !data?.weights_current;
-
   async function onImport() {
     setError(null);
 
@@ -393,6 +417,8 @@ export default function PortfolioPage() {
       setLoading(true);
       const res = await importB3({ file, noTesouro: false });
       setData(res);
+      setRemovedTickers([]);
+      localStorage.removeItem(LS_REMOVED_KEY);
       localStorage.setItem(LS_IMPORT_KEY, JSON.stringify(res));
 
       const nextDefault = pickDefaultName(res.meta?.filename, file.name);
@@ -417,8 +443,13 @@ export default function PortfolioPage() {
     setManualPrice("");
     setShowSug(false);
 
+    setNotesByTicker({});
+    setRemovedTickers([]);
+
     localStorage.removeItem(LS_IMPORT_KEY);
     localStorage.removeItem(LS_MANUAL_KEY);
+    localStorage.removeItem(LS_NOTES_KEY);
+    localStorage.removeItem(LS_REMOVED_KEY);
   }
 
   function addManual() {
@@ -449,6 +480,9 @@ export default function PortfolioPage() {
       quantity: qn,
       price: priceCandidate,
     };
+
+    // se estava removido, restaura
+    restoreTicker(pos.ticker);
 
     setManualPositions((prev) => {
       const i = prev.findIndex((p) => p.ticker === pos.ticker);
@@ -496,7 +530,7 @@ export default function PortfolioPage() {
       setManualPrice(String(meta.price));
     }
 
-    // busca preço remoto pra confirmar/atualizar (não dá return)
+    // busca preço remoto pra confirmar/atualizar
     try {
       setPriceLoading(true);
 
@@ -564,9 +598,7 @@ export default function PortfolioPage() {
                 </button>
               </div>
 
-              <div className="mt-2 text-xs text-[var(--text-muted)]">
-                Sugestão automática baseada no arquivo importado. Você pode editar.
-              </div>
+              <div className="mt-2 text-xs text-[var(--text-muted)]">Sugestão automática baseada no arquivo importado. Você pode editar.</div>
             </div>
 
             <div className="hidden md:block md:col-span-3" />
@@ -591,12 +623,7 @@ export default function PortfolioPage() {
                       {file ? file.name : data?.meta?.filename ?? "Nenhum arquivo"}
                     </span>
 
-                    <input
-                      type="file"
-                      accept=".xlsx"
-                      className="hidden"
-                      onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                    />
+                    <input type="file" accept=".xlsx" className="hidden" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
                   </label>
 
                   <button
@@ -620,9 +647,7 @@ export default function PortfolioPage() {
                     </ul>
                   </div>
                 ) : (
-                  <div className="text-xs text-[var(--text-muted)]">
-                    Se o arquivo não for compatível, use o modo manual ao lado.
-                  </div>
+                  <div className="text-xs text-[var(--text-muted)]">Se o arquivo não for compatível, use o modo manual ao lado.</div>
                 )}
               </div>
             </div>
@@ -635,6 +660,7 @@ export default function PortfolioPage() {
                 <div className="relative">
                   <label className="block text-xs text-[var(--text-muted)] mb-1">Ativo</label>
 
+                  {/* wrapper relative pra overlay dentro do input */}
                   <div className="relative group">
                     <input
                       value={q}
@@ -650,30 +676,27 @@ export default function PortfolioPage() {
                                  text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-[var(--primary)]/30"
                     />
 
+                    {/* indicador discreto no canto direito, sem mexer layout */}
                     <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
                       {sugLoading || priceLoading || assetIndexLoading ? (
                         <span
-                          title={
-                            priceLoading
-                              ? "Buscando preço..."
-                              : sugLoading
-                                ? "Buscando sugestões..."
-                                : "Carregando base..."
-                          }
+                          title={assetIndexLoading ? "Carregando ativos..." : priceLoading ? "Buscando preço..." : "Buscando sugestões..."}
                           className="h-2 w-2 rounded-full bg-[var(--text-muted)]/60 group-hover:bg-[var(--text-primary)]/60"
                         />
                       ) : null}
                     </div>
 
-                    {(sugLoading || priceLoading || assetIndexLoading) ? (
+                    {/* tooltip no hover (não altera layout) */}
+                    {sugLoading || priceLoading || assetIndexLoading ? (
                       <div className="pointer-events-none absolute right-2 -top-8 hidden group-hover:block">
                         <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs text-[var(--text-muted)] shadow-lg">
-                          {priceLoading ? "Buscando preço..." : sugLoading ? "Buscando sugestões..." : "Carregando base..."}
+                          {assetIndexLoading ? "Carregando ativos..." : priceLoading ? "Buscando preço..." : "Buscando sugestões..."}
                         </div>
                       </div>
                     ) : null}
                   </div>
 
+                  {/* dropdown sugestões */}
                   {showSug && !sugLoading && remoteSug.length > 0 ? (
                     <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-lg">
                       {remoteSug.map((ticker) => (
@@ -705,7 +728,7 @@ export default function PortfolioPage() {
                   </div>
 
                   <div>
-                    <label className="block text-xs text-[var(--text-muted)] mb-1">Preço</label>
+                    <label className="block text-xs text-[var(--text-muted)] mb-1">Preço (opcional)</label>
                     <input
                       value={manualPrice}
                       onChange={(e) => setManualPrice(e.target.value)}
@@ -728,9 +751,7 @@ export default function PortfolioPage() {
                   </button>
                 </div>
 
-                <div className="text-xs text-[var(--text-muted)]">
-                  Sugestões vêm do backend e/ou do index local carregado na abertura.
-                </div>
+                <div className="text-xs text-[var(--text-muted)]">Sugestões vêm do backend (/api/bd_remote/symbols).</div>
               </div>
             </div>
           </div>
@@ -741,45 +762,47 @@ export default function PortfolioPage() {
         {/* Right summary */}
         <div className="lg:col-span-2 space-y-4">
           <div className="grid grid-cols-2 gap-4">
-            <StatCard title="Total investido" value={fmtMoney(totals.total)} hint="Somente posições (sem caixa)" />
+            <StatCard title="Total investido" value={fmtMoney(totals.totalValue)} hint="Somente posições (sem caixa)" />
             <StatCard title="Ativos" value={String(holdings.length)} hint="Linhas na carteira" />
           </div>
+
 
           <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5 space-y-2">
             <div className="text-sm font-semibold text-[var(--text-primary)]">Alocação atual</div>
 
-            {useDynamicWeights ? (
-              <div className="grid grid-cols-3 gap-3 text-sm">
-                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] p-3">
+            <div className="grid grid-cols-3 gap-3 text-sm">
+              {totals.count.stocks > 0 ? (
+                <div className="relative rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] p-3">
+                  <div className="absolute right-2 top-2 text-[10px] px-2 py-0.5 rounded-full border border-[var(--border)] text-[var(--text-muted)]">
+                    {totals.count.stocks}
+                  </div>
                   <div className="text-xs text-[var(--text-muted)]">Ações</div>
-                  <div className="mt-1 font-semibold">{fmtPct(totals.pct.stocks)}</div>
+                  <div className="mt-1 font-semibold">{fmtPct(totals.pctValue.stocks)}</div>
                 </div>
-                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] p-3">
+              ) : null}
+
+              {totals.count.fiis > 0 ? (
+                <div className="relative rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] p-3">
+                  <div className="absolute right-2 top-2 text-[10px] px-2 py-0.5 rounded-full border border-[var(--border)] text-[var(--text-muted)]">
+                    {totals.count.fiis}
+                  </div>
                   <div className="text-xs text-[var(--text-muted)]">FIIs</div>
-                  <div className="mt-1 font-semibold">{fmtPct(totals.pct.fiis)}</div>
+                  <div className="mt-1 font-semibold">{fmtPct(totals.pctValue.fiis)}</div>
                 </div>
-                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] p-3">
+              ) : null}
+
+              {totals.count.bonds > 0 ? (
+                <div className="relative rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] p-3">
+                  <div className="absolute right-2 top-2 text-[10px] px-2 py-0.5 rounded-full border border-[var(--border)] text-[var(--text-muted)]">
+                    {totals.count.bonds}
+                  </div>
                   <div className="text-xs text-[var(--text-muted)]">RF</div>
-                  <div className="mt-1 font-semibold">{fmtPct(totals.pct.bonds)}</div>
+                  <div className="mt-1 font-semibold">{fmtPct(totals.pctValue.bonds)}</div>
                 </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-3 gap-3 text-sm">
-                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] p-3">
-                  <div className="text-xs text-[var(--text-muted)]">Ações</div>
-                  <div className="mt-1 font-semibold">{fmtPct(data!.weights_current!.stocks)}</div>
-                </div>
-                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] p-3">
-                  <div className="text-xs text-[var(--text-muted)]">FIIs</div>
-                  <div className="mt-1 font-semibold">{fmtPct(data!.weights_current!.fiis)}</div>
-                </div>
-                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] p-3">
-                  <div className="text-xs text-[var(--text-muted)]">RF</div>
-                  <div className="mt-1 font-semibold">{fmtPct(data!.weights_current!.bonds)}</div>
-                </div>
-              </div>
-            )}
+              ) : null}
+            </div>
           </div>
+
         </div>
       </section>
 
@@ -819,13 +842,15 @@ export default function PortfolioPage() {
                   <th className="p-3 font-semibold text-[var(--text-muted)] text-right">Qtd</th>
                   <th className="p-3 font-semibold text-[var(--text-muted)] text-right">Preço</th>
                   <th className="p-3 font-semibold text-[var(--text-muted)] text-right">Valor</th>
+                  <th className="p-3 font-semibold text-[var(--text-muted)] text-center">Nota</th>
+                  <th className="p-3 font-semibold text-[var(--text-muted)] text-center"></th>
                 </tr>
               </thead>
 
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="p-6 text-center text-[var(--text-muted)]">
+                    <td colSpan={7} className="p-6 text-center text-[var(--text-muted)]">
                       {data || manualPositions.length ? "Nenhuma posição nesse filtro." : "Sem dados ainda — importe ou adicione manualmente."}
                     </td>
                   </tr>
@@ -833,14 +858,45 @@ export default function PortfolioPage() {
                   filtered.map((h, idx) => (
                     <tr key={`${h.ticker}-${idx}`} className="border-t border-[var(--border)] hover:bg-[var(--surface-alt)]/40">
                       <td className="p-3 font-semibold text-[var(--text-primary)]">{h.ticker}</td>
+
                       <td className="p-3 align-middle">
                         <div className="flex items-center justify-center">
                           <Badge cls={h.cls} />
                         </div>
                       </td>
+
                       <td className="p-3 text-right text-[var(--text-primary)]">{fmtQty(h.quantity)}</td>
                       <td className="p-3 text-right text-[var(--text-primary)]">{fmtMoney(h.price)}</td>
                       <td className="p-3 text-right font-semibold text-[var(--text-primary)]">{fmtMoney(h.value)}</td>
+
+                      <td className="p-3 text-center">
+                        <input
+                          type="number"
+                          min={0}
+                          max={10}
+                          step={1}
+                          value={notesByTicker[(h.ticker ?? "").toUpperCase()] ?? 10}
+                          onChange={(e) => {
+                            const tk = (h.ticker ?? "").toUpperCase();
+                            const v = clampNote(Number(e.target.value));
+                            setNotesByTicker((prev) => ({ ...prev, [tk]: v }));
+                          }}
+                          className="w-16 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-sm text-center
+                                     text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-[var(--primary)]/30"
+                        />
+                      </td>
+
+                      <td className="p-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => removeTicker(h.ticker)}
+                          title="Remover"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)]
+                                     text-[var(--text-muted)] hover:text-[color:var(--sell)] hover:border-[color:var(--sell)]/40 hover:bg-[var(--surface-alt)]"
+                        >
+                          ×
+                        </button>
+                      </td>
                     </tr>
                   ))
                 )}
