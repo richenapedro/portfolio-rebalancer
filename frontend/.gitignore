@@ -42,3 +42,12 @@ next-env.d.ts
 
 # .zip files
 *.zip
+
+__pycache__/
+*.pyc
+*.egg-info
+dist/
+build/
+node_modules/
+.next/
+

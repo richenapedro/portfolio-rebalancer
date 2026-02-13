@@ -1,5 +1,15 @@
 {
+  "name": "portfolio-rebalancer",
+  "private": true,
+  "workspaces": ["frontend"],
   "devDependencies": {
     "prettier": "^3.7.4"
+  },
+  "scripts": {
+    "fmt": "prettier -w .",
+    "fmt:check": "prettier -c .",
+    "front:dev": "npm -w frontend run dev",
+    "front:build": "npm -w frontend run build",
+    "front:lint": "npm -w frontend run lint"
   }
 }
