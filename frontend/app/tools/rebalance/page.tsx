@@ -1,7 +1,6 @@
 /* page.tsx */
 "use client";
 
-
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AllocationSliders,
@@ -16,6 +15,11 @@ import {
 } from "@/lib/api";
 import { SummaryCards } from "../../components/SummaryCards";
 import { TradesTable } from "../../components/TradesTable";
+
+/* ------------------------- API base (DB endpoints) ------------------------- */
+
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
 
 /* ------------------------- scroll sync (Before/After) ------------------------- */
 
@@ -71,6 +75,8 @@ type UnifiedRow = {
 };
 
 type AssetClass = "stocks" | "fiis" | "bonds";
+
+type ImportSource = "file" | "db" | null;
 
 /* -------------------------------- helpers --------------------------------- */
 
@@ -252,7 +258,10 @@ function HoldingsBeforeTable(props: {
 }) {
   const total = useMemo(
     () =>
-      props.rows.reduce((acc: number, r: UnifiedRow) => acc + (r.before.value ?? 0), 0),
+      props.rows.reduce(
+        (acc: number, r: UnifiedRow) => acc + (r.before.value ?? 0),
+        0,
+      ),
     [props.rows],
   );
   const bodyRef = useRef<HTMLDivElement | null>(null);
@@ -346,7 +355,10 @@ function HoldingsAfterTable(props: {
 }) {
   const total = useMemo(
     () =>
-      props.rows.reduce((acc: number, r: UnifiedRow) => acc + (r.after.value ?? 0), 0),
+      props.rows.reduce(
+        (acc: number, r: UnifiedRow) => acc + (r.after.value ?? 0),
+        0,
+      ),
     [props.rows],
   );
   const bodyRef = useRef<HTMLDivElement | null>(null);
@@ -441,6 +453,95 @@ function HoldingsAfterTable(props: {
 export default function RebalancePage() {
   const [file, setFile] = useState<File | null>(null);
 
+  // ✅ DB portfolios
+  const [dbPortfolios, setDbPortfolios] = useState<
+    Array<{ id: number; name: string }>
+  >([]);
+  const [selectedDbId, setSelectedDbId] = useState<number | "">("");
+  const [loadingDb, setLoadingDb] = useState(false);
+
+  // ✅ UI clarity for source
+  const [importSource, setImportSource] = useState<ImportSource>(null);
+
+  async function loadDbPortfolios() {
+    try {
+      setLoadingDb(true);
+      const r = await fetch(`${API_BASE}/api/db/portfolios`);
+      if (!r.ok) {
+        const txt = await r.text().catch(() => "");
+        throw new Error(`list portfolios failed: ${r.status} ${txt}`);
+      }
+      const j = (await r.json()) as {
+        items: Array<{ id: number; name: string }>;
+      };
+      setDbPortfolios(j.items ?? []);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setErr(msg);
+    } finally {
+      setLoadingDb(false);
+    }
+  }
+
+  async function importFromDbPortfolio(portfolioId: number) {
+    const r = await fetch(
+      `${API_BASE}/api/db/portfolios/${portfolioId}/export_b3_xlsx`,
+    );
+    if (!r.ok) {
+      const txt = await r.text().catch(() => "");
+      throw new Error(`export xlsx failed: ${r.status} ${txt}`);
+    }
+
+    const blob = await r.blob();
+    const f = new File([blob], `portfolio_${portfolioId}.xlsx`, {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+
+    setImportSource("db");
+    setFile(f);
+
+    // limpa estado anterior
+    setErr(null);
+    setJob(null);
+    setJobId(null);
+
+    const data = await importB3({ file: f, noTesouro: false });
+
+    if (data.weights_current) {
+      const s = Number(data.weights_current.stocks ?? 0);
+      const fi = Number(data.weights_current.fiis ?? 0);
+      const b = Number(data.weights_current.bonds ?? 0);
+      const sum = s + fi + b;
+
+      if (sum > 0) {
+        const ns = Math.round((s / sum) * 100);
+        const nfi = Math.round((fi / sum) * 100);
+        let nb = 100 - ns - nfi;
+        if (nb < 0) nb = 0;
+
+        setWeights({ stocks: ns, fiis: nfi, bonds: nb });
+      }
+    }
+  }
+
+  // ✅ Load on mount and when user returns to tab
+  useEffect(() => {
+    const safeReload = () => void loadDbPortfolios();
+    safeReload();
+
+    const onFocus = () => safeReload();
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") safeReload();
+    };
+
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, []);
+
   // Cash: só faz sentido em BUY. Em SELL/TRADE vira 0 automaticamente.
   const [cash, setCash] = useState<number>(100);
   const [lastBuyCash, setLastBuyCash] = useState<number>(100);
@@ -531,7 +632,6 @@ export default function RebalancePage() {
     [resultUnknown],
   );
 
-  // ✅ moved inside component (rules-of-hooks)
   const holdingsTotalBefore = useMemo(() => {
     return holdingsBefore.reduce((acc: number, r: HoldingRow) => {
       return acc + (typeof r.value === "number" ? r.value : 0);
@@ -594,6 +694,12 @@ export default function RebalancePage() {
 
   const hasHoldings = holdingsBefore.length > 0 || holdingsAfter.length > 0;
 
+  const selectedDbLabel = useMemo(() => {
+    if (selectedDbId === "") return null;
+    const p = dbPortfolios.find((x) => x.id === selectedDbId);
+    return p ? `#${p.id} — ${p.name}` : `#${selectedDbId}`;
+  }, [selectedDbId, dbPortfolios]);
+
   return (
     <main className="space-y-6">
       <div className="flex items-baseline justify-between">
@@ -607,26 +713,80 @@ export default function RebalancePage() {
 
       <section className="grid grid-cols-1 lg:grid-cols-5 gap-4">
         <div className="lg:col-span-3 bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5 space-y-4">
+          {/* ✅ Unified import row */}
           <div className="space-y-2">
             <label className="block text-sm font-medium text-[var(--text-primary)]">
-              Arquivo B3 (XLSX)
+              Importar carteira
             </label>
 
-            <div className="flex items-center gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 items-stretch">
+              <select
+                value={importSource === "file" ? "__file__" : selectedDbId}
+                onChange={async (e) => {
+                  const v = e.target.value;
+
+                  // clicking the "Imported from file" placeholder does nothing
+                  if (v === "__file__") return;
+
+                  const nextId = v ? Number(v) : "";
+                  setSelectedDbId(nextId);
+
+                  if (nextId === "") return;
+
+                  try {
+                    setErr(null);
+                    await importFromDbPortfolio(nextId);
+                  } catch (err: unknown) {
+                    const msg =
+                      err instanceof Error ? err.message : String(err);
+                    setErr(msg);
+                  }
+                }}
+                disabled={loading || loadingDb}
+                title={
+                  importSource === "file"
+                    ? "Imported from file (use the dropdown to pick a DB portfolio instead)."
+                    : "Selecione uma carteira do banco para importar automaticamente."
+                }
+                className={`w-full h-10 rounded-lg border border-[var(--border)] bg-[var(--surface-alt)]
+                           px-3 text-sm text-[var(--text-primary)] outline-none
+                           ${importSource === "file" ? "cursor-help" : ""}`}
+              >
+                {importSource === "file" ? (
+                  <option value="__file__">Imported from file</option>
+                ) : (
+                  <option value="">Selecione uma carteira do banco…</option>
+                )}
+
+                {dbPortfolios.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    #{p.id} — {p.name}
+                  </option>
+                ))}
+              </select>
+
+              {/* Button that opens file picker and imports immediately */}
               <label
                 className="inline-flex h-10 cursor-pointer items-center justify-center rounded-xl
                            border border-[var(--border)] bg-[var(--surface-alt)] px-4 text-sm font-semibold
-                           text-[var(--text-primary)] hover:bg-[var(--surface-alt)]/70 transition-colors"
+                           text-[var(--text-primary)] hover:bg-[var(--surface-alt)]/70 transition-colors
+                           disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Importar XLSX da B3"
               >
-                {file ? "Trocar arquivo" : "Escolher arquivo"}
+                Importar arquivo
                 <input
                   type="file"
                   accept=".xlsx"
+                  className="hidden"
                   onChange={async (e) => {
                     const f = e.target.files?.[0] ?? null;
-                    setFile(f);
-
                     if (!f) return;
+
+                    // user chose file => mark source + clear db selection
+                    setImportSource("file");
+                    setSelectedDbId("");
+
+                    setFile(f);
 
                     // limpa estado anterior
                     setErr(null);
@@ -636,9 +796,7 @@ export default function RebalancePage() {
                     try {
                       const data = await importB3({ file: f, noTesouro: false });
 
-                      // ✅ ajusta sliders com o peso atual do portfolio
                       if (data.weights_current) {
-                        // garante soma 100 caso venha com drift
                         const s = Number(data.weights_current.stocks ?? 0);
                         const fi = Number(data.weights_current.fiis ?? 0);
                         const b = Number(data.weights_current.bonds ?? 0);
@@ -647,44 +805,74 @@ export default function RebalancePage() {
                         if (sum > 0) {
                           const ns = Math.round((s / sum) * 100);
                           const nfi = Math.round((fi / sum) * 100);
-                          let nb = 100 - ns - nfi; // força fechar em 100
+                          let nb = 100 - ns - nfi;
                           if (nb < 0) nb = 0;
 
                           setWeights({ stocks: ns, fiis: nfi, bonds: nb });
                         }
                       }
                     } catch (err: unknown) {
-                      const msg = err instanceof Error ? err.message : String(err);
+                      const msg =
+                        err instanceof Error ? err.message : String(err);
                       setErr(msg);
+                    } finally {
+                      // allow selecting same file again if needed
+                      e.currentTarget.value = "";
                     }
                   }}
-                  className="hidden"
                 />
-
               </label>
-
-              <div className="min-w-0 flex-1">
-                {file ? (
-                  <div className="truncate text-sm text-[var(--text-primary)]">
-                    <span className="font-mono">{file.name}</span>
-                  </div>
-                ) : (
-                  <div className="text-sm text-[var(--text-muted)]">
-                    Nenhum arquivo selecionado
-                  </div>
-                )}
-              </div>
             </div>
 
-            {file && (
-              <button
-                type="button"
-                onClick={() => setFile(null)}
-                className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-              >
-                Remover
-              </button>
-            )}
+            {/* ✅ Source + current file indicator */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-[var(--text-muted)]">Fonte:</span>
+
+              {importSource === "file" ? (
+                <span
+                  className="inline-flex items-center rounded-full border border-[var(--border)]
+                             bg-[var(--surface-alt)] px-2.5 py-1 text-xs text-[var(--text-primary)]
+                             cursor-help"
+                  title="Você importou via arquivo. Para voltar ao banco, selecione uma carteira no dropdown."
+                >
+                  Arquivo
+                </span>
+              ) : importSource === "db" ? (
+                <span className="inline-flex items-center rounded-full border border-[var(--border)]
+                                 bg-[var(--surface-alt)] px-2.5 py-1 text-xs text-[var(--text-primary)]">
+                  Banco {selectedDbLabel ? `(${selectedDbLabel})` : ""}
+                </span>
+              ) : (
+                <span className="inline-flex items-center rounded-full border border-[var(--border)]
+                                 bg-[var(--surface-alt)] px-2.5 py-1 text-xs text-[var(--text-muted)]">
+                  —
+                </span>
+              )}
+
+              <span className="text-xs text-[var(--text-muted)]">Arquivo:</span>
+              <span className="text-xs font-mono text-[var(--text-primary)]">
+                {file ? file.name : "—"}
+              </span>
+
+              {file && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFile(null);
+                    setImportSource(null);
+                    setSelectedDbId("");
+                  }}
+                  className="ml-auto text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                >
+                  Remover
+                </button>
+              )}
+            </div>
+
+            <div className="text-xs text-[var(--text-muted)]">
+              • Selecionar uma carteira do banco importa automaticamente. •
+              Importar arquivo abre o seletor e importa automaticamente.
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

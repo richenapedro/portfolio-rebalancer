@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import tempfile
 from typing import Any
-from .routers.bd_remote import router as bd_remote_router
 
 from fastapi import (
     BackgroundTasks,
@@ -22,6 +21,11 @@ from portfolio_rebalancer.models import Portfolio, Position
 from portfolio_rebalancer.rebalance import rebalance
 from portfolio_rebalancer.targets import TargetAllocation
 from portfolio_rebalancer.targets_default import build_weighted_targets
+from .routers.bd_remote import router as bd_remote_router
+
+from .settings import PORTFOLIO_DB_PATH
+from .db.sqlite_db import init_db
+from .routers.portfolio_db import router as portfolio_db_router
 
 from .errors import validation_error_handler, value_error_handler
 from .jobs import create_job, get_job, set_done, set_error, set_running
@@ -55,6 +59,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+def _startup():
+    init_db(PORTFOLIO_DB_PATH)
+
+
+app.include_router(bd_remote_router)
+app.include_router(portfolio_db_router)
 
 
 @app.get("/health")

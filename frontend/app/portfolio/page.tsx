@@ -1,7 +1,7 @@
 /* page.tsx */
 "use client";
+
 import { useEffect, useMemo, useRef, useState } from "react";
-// /mnt/data/page.tsx
 import {
   importB3,
   type ImportResponse,
@@ -9,6 +9,7 @@ import {
   getRemotePrices,
   getRemoteAssets,
   type RemoteAsset,
+  type ApiAssetClass,
 } from "@/lib/api";
 
 type AssetClass = "stocks" | "fiis" | "bonds" | "other";
@@ -28,6 +29,97 @@ type PickedAsset = {
   price?: number;
 };
 
+/* ------------------------- DB endpoints (portfolios) ------------------------ */
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
+
+type DbPortfolio = { id: number; name: string };
+type DbPositionRow = {
+  ticker: string;
+  quantity: number;
+  price: number | null;
+  cls: string | null;
+  note: number | null;
+  source?: string | null;
+};
+
+async function dbListPortfolios(): Promise<DbPortfolio[]> {
+  const r = await fetch(`${API_BASE}/api/db/portfolios`, { cache: "no-store" });
+  if (!r.ok) {
+    const txt = await r.text().catch(() => "");
+    throw new Error(`list portfolios failed: ${r.status} ${txt}`);
+  }
+  const j = (await r.json()) as { items: DbPortfolio[] };
+  return j.items ?? [];
+}
+
+async function dbGetPositions(portfolioId: number): Promise<DbPositionRow[]> {
+  const r = await fetch(`${API_BASE}/api/db/portfolios/${portfolioId}/positions`, { cache: "no-store" });
+  if (!r.ok) {
+    const txt = await r.text().catch(() => "");
+    throw new Error(`get positions failed: ${r.status} ${txt}`);
+  }
+  const j = (await r.json()) as { items: DbPositionRow[] };
+  return j.items ?? [];
+}
+
+async function dbRenamePortfolio(portfolioId: number, name: string): Promise<void> {
+  const r = await fetch(`${API_BASE}/api/db/portfolios/${portfolioId}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json", accept: "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  if (!r.ok) {
+    const txt = await r.text().catch(() => "");
+    throw new Error(`rename portfolio failed: ${r.status} ${txt}`);
+  }
+}
+
+async function dbCreatePortfolio(name: string): Promise<{ id: number; name: string }> {
+  const r = await fetch(`${API_BASE}/api/db/portfolios`, {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  if (!r.ok) {
+    const txt = await r.text().catch(() => "");
+    throw new Error(`create portfolio failed: ${r.status} ${txt}`);
+  }
+  return (await r.json()) as { id: number; name: string };
+}
+
+async function dbReplacePositions(portfolioId: number, positions: Array<{
+  ticker: string;
+  quantity: number;
+  price: number;
+  cls: ApiAssetClass;
+  note: number;
+  source: "manual" | "import";
+}>): Promise<void> {
+  const r = await fetch(`${API_BASE}/api/db/portfolios/${portfolioId}/positions/replace`, {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json" },
+    body: JSON.stringify({ positions }),
+  });
+  if (!r.ok) {
+    const txt = await r.text().catch(() => "");
+    throw new Error(`replace positions failed: ${r.status} ${txt}`);
+  }
+}
+
+async function dbDeletePortfolio(portfolioId: number): Promise<void> {
+  const r = await fetch(`${API_BASE}/api/db/portfolios/${portfolioId}`, {
+    method: "DELETE",
+    headers: { accept: "application/json" },
+  });
+  if (!r.ok) {
+    const txt = await r.text().catch(() => "");
+    throw new Error(`delete portfolio failed: ${r.status} ${txt}`);
+  }
+}
+
+/* -------------------------------- helpers --------------------------------- */
+
 function mapAssetClassToAssetType(assetClass: AssetClass): Position["asset_type"] {
   if (assetClass === "fiis") return "FII";
   if (assetClass === "stocks") return "STOCK";
@@ -43,6 +135,19 @@ function mapAssetTypeToClass(assetType?: string): AssetClass {
     return "bonds";
   if (at.includes("stock") || at.includes("acao") || at.includes("ação") || at.includes("equity")) return "stocks";
   return "other";
+}
+
+function mapDbClsToAssetType(cls?: string | null, ticker?: string | null): Position["asset_type"] {
+  const c = (cls ?? "").trim().toLowerCase();
+  const t = (ticker ?? "").trim().toUpperCase();
+
+  if (c === "fiis" || c === "fii") return "FII";
+  if (c === "bonds" || c === "bond" || c === "tesouro" || c === "rf") return "BOND";
+  if (c === "stocks" || c === "stock" || c === "acoes" || c === "ação") return "STOCK";
+
+  if (t.endsWith("11")) return "FII";
+  if (t.startsWith("BRSTN")) return "BOND";
+  return "STOCK";
 }
 
 function fmtMoney(n: number) {
@@ -78,36 +183,6 @@ function StatCard(props: { title: string; value: string; hint?: string }) {
       {props.hint ? <div className="mt-1 text-xs text-[var(--text-muted)]">{props.hint}</div> : null}
     </div>
   );
-}
-
-const LS_IMPORT_KEY = "portfolio:lastImport";
-const LS_NAME_KEY = "portfolio:portfolioName";
-const LS_MANUAL_KEY = "portfolio:manualPositions";
-const LS_NOTES_KEY = "portfolio:notesByTicker";
-const LS_REMOVED_KEY = "portfolio:removedTickers";
-
-function pickDefaultName(metaFilename?: string, fileName?: string) {
-  const raw = (metaFilename || fileName || "Minha carteira").trim();
-  return raw.replace(/\.[^.]+$/, "");
-}
-
-function summarizeMeta(meta?: ImportResponse["meta"] | null, manualCount?: number) {
-  const m = manualCount ?? 0;
-  if (!meta) return m ? `${m} itens adicionados manualmente` : "";
-
-  const a = meta.n_positions ?? 0;
-  const b = meta.n_prices ?? 0;
-  const c = meta.n_targets ?? 0;
-
-  if (a === b && b === c) return `${a + m} itens na carteira`;
-
-  const parts: string[] = [];
-  if (a) parts.push(`Posições: ${a}`);
-  if (b) parts.push(`Preços: ${b}`);
-  if (c) parts.push(`Targets: ${c}`);
-  if (m) parts.push(`Manual: ${m}`);
-
-  return parts.length ? parts.join(" • ") : "Dados importados";
 }
 
 function ConfirmModal(props: {
@@ -161,13 +236,29 @@ function clampNote(v: number) {
   return Math.round(v);
 }
 
+function toApiAssetClass(cls: AssetClass): ApiAssetClass {
+  return cls;
+}
+
+/* --------------------------------- page ----------------------------------- */
+
 export default function PortfolioPage() {
   const [file, setFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [data, setData] = useState<ImportResponse | null>(null);
   const [portfolioName, setPortfolioName] = useState<string>("");
+
+  // DB portfolios
+  const [dbPortfolios, setDbPortfolios] = useState<DbPortfolio[]>([]);
+  const [dbLoading, setDbLoading] = useState(false);
+  const [selectedPortfolioId, setSelectedPortfolioId] = useState<number | "">("");
+
+  const [confirmClearOpen, setConfirmClearOpen] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
   // manual
   const [manualPositions, setManualPositions] = useState<Position[]>([]);
@@ -179,8 +270,6 @@ export default function PortfolioPage() {
   const [showSug, setShowSug] = useState(false);
   const blurTimer = useRef<number | null>(null);
 
-  const [confirmClearOpen, setConfirmClearOpen] = useState(false);
-
   // sugestões remotas
   const [remoteSug, setRemoteSug] = useState<string[]>([]);
   const [sugLoading, setSugLoading] = useState(false);
@@ -191,9 +280,13 @@ export default function PortfolioPage() {
   const [assetIndex, setAssetIndex] = useState<RemoteAsset[] | null>(null);
   const [assetIndexLoading, setAssetIndexLoading] = useState(false);
 
-  // notas/pesos + removidos
+  // notas + removidos
   const [notesByTicker, setNotesByTicker] = useState<Record<string, number>>({});
   const [removedTickers, setRemovedTickers] = useState<string[]>([]);
+
+  // salvar no banco (status)
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [saveMsg, setSaveMsg] = useState<string | null>(null);
 
   const assetByTicker = useMemo(() => {
     const m = new Map<string, RemoteAsset>();
@@ -212,14 +305,32 @@ export default function PortfolioPage() {
     setRemovedTickers((prev) => prev.filter((x) => x !== tk));
   }
 
-  // /mnt/data/page.tsx
+  async function refreshDbPortfolios() {
+    try {
+      setDbLoading(true);
+      const items = await dbListPortfolios();
+      setDbPortfolios(items);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
+    } finally {
+      setDbLoading(false);
+    }
+  }
+
+  // load portfolios list on mount
+  useEffect(() => {
+    void refreshDbPortfolios();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // assets index (1 call)
   useEffect(() => {
     let alive = true;
-
     (async () => {
       try {
         setAssetIndexLoading(true);
-        const res = await getRemoteAssets(); // ✅ 1 chamada só
+        const res = await getRemoteAssets();
         if (!alive) return;
         setAssetIndex(res.items);
       } catch (e) {
@@ -230,72 +341,132 @@ export default function PortfolioPage() {
         if (alive) setAssetIndexLoading(false);
       }
     })();
-
     return () => {
       alive = false;
     };
   }, []);
 
-  // restore last import + name + manual + notes + removed
-  useEffect(() => {
+  // uniqueness check (case-insensitive)
+  const nameTakenByOther = useMemo(() => {
+    const name = portfolioName.trim().toLowerCase();
+    if (!name) return false;
+
+    const found = dbPortfolios.find((p) => p.name.trim().toLowerCase() === name);
+    if (!found) return false;
+
+    if (selectedPortfolioId === "") return true; // creating a new one -> taken
+    return found.id !== selectedPortfolioId; // editing -> taken if it's not the same id
+  }, [portfolioName, dbPortfolios, selectedPortfolioId]);
+
+  // Load a portfolio from DB when selected
+  async function loadFromDb(portfolioId: number) {
+    setError(null);
+    setSaveMsg(null);
+
     try {
-      const rawImport = localStorage.getItem(LS_IMPORT_KEY);
-      if (rawImport) setData(JSON.parse(rawImport) as ImportResponse);
+      setLoading(true);
 
-      const rawName = localStorage.getItem(LS_NAME_KEY);
-      if (rawName) setPortfolioName(rawName);
+      // find name from list
+      const p = dbPortfolios.find((x) => x.id === portfolioId);
+      setPortfolioName(p?.name ?? `Carteira #${portfolioId}`);
 
-      const rawManual = localStorage.getItem(LS_MANUAL_KEY);
-      if (rawManual) setManualPositions(JSON.parse(rawManual) as Position[]);
+      const rows = await dbGetPositions(portfolioId);
 
-      const rawNotes = localStorage.getItem(LS_NOTES_KEY);
-      if (rawNotes) setNotesByTicker(JSON.parse(rawNotes) as Record<string, number>);
+      // convert db positions -> "import-like"
+      const positions: Position[] = rows.map((r) => ({
+        ticker: String(r.ticker ?? "").toUpperCase(),
+        quantity: Number(r.quantity ?? 0),
+        price: r.price == null ? 0 : Number(r.price),
+        asset_type: mapDbClsToAssetType(r.cls, r.ticker),
+      }));
 
-      const rawRemoved = localStorage.getItem(LS_REMOVED_KEY);
-      if (rawRemoved) setRemovedTickers(JSON.parse(rawRemoved) as string[]);
-    } catch {
-      // ignore
+      // put everything as "imported base" and keep manual empty
+      setData({
+        positions,
+        prices: {},
+        targets: {},
+        warnings: [],
+        meta: {
+          filename: "Imported from DB",
+          n_positions: positions.length,
+          n_prices: 0,
+          n_targets: 0,
+        },
+      } as ImportResponse);
+
+      setManualPositions([]);
+      setPicked(null);
+      setQ("");
+      setQty("");
+      setManualPrice("");
+      setShowSug(false);
+
+      setNotesByTicker(() => {
+        const next: Record<string, number> = {};
+        for (const r of rows) {
+          const tk = String(r.ticker ?? "").toUpperCase();
+          const note = r.note == null ? 10 : clampNote(Number(r.note));
+          next[tk] = note;
+        }
+        return next;
+      });
+
+      setRemovedTickers([]);
+
+      // clear file state (DB is the base now)
+      setFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
+    } finally {
+      setLoading(false);
     }
-  }, []);
+  }
 
-  // default portfolio name
-  useEffect(() => {
-    if (portfolioName.trim()) return;
-    const candidate = pickDefaultName(data?.meta?.filename, file?.name);
-    setPortfolioName(candidate);
-  }, [data?.meta?.filename, file?.name, portfolioName]);
+  function newPortfolio() {
+    setSelectedPortfolioId("");
+    setPortfolioName("Minha carteira");
 
-  // persist name
-  useEffect(() => {
-    const v = portfolioName.trim();
-    if (!v) return;
-    try {
-      localStorage.setItem(LS_NAME_KEY, v);
-    } catch {}
-  }, [portfolioName]);
+    setData(null);
+    setFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
 
-  // persist manual
-  useEffect(() => {
-    try {
-      localStorage.setItem(LS_MANUAL_KEY, JSON.stringify(manualPositions));
-    } catch {}
-  }, [manualPositions]);
+    setManualPositions([]);
+    setPicked(null);
+    setQ("");
+    setQty("");
+    setManualPrice("");
+    setShowSug(false);
 
-  // persist notes
-  useEffect(() => {
-    try {
-      localStorage.setItem(LS_NOTES_KEY, JSON.stringify(notesByTicker));
-    } catch {}
-  }, [notesByTicker]);
+    setNotesByTicker({});
+    setRemovedTickers([]);
 
-  // persist removed
-  useEffect(() => {
-    try {
-      localStorage.setItem(LS_REMOVED_KEY, JSON.stringify(removedTickers));
-    } catch {}
-  }, [removedTickers]);
+    setSaveMsg(null);
+    setError(null);
+  }
 
-  // ✅ buscar sugestões conforme digita (debounce)
+  function clearEverythingLocalOnly() {
+    // "limpar carteira" = limpar edição atual (não apaga do DB)
+    setData(null);
+    setFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    setError(null);
+
+    setManualPositions([]);
+    setPicked(null);
+    setQ("");
+    setQty("");
+    setManualPrice("");
+    setShowSug(false);
+
+    setNotesByTicker({});
+    setRemovedTickers([]);
+
+    setSaveMsg(null);
+  }
+
+  // buscar sugestões conforme digita (debounce)
   useEffect(() => {
     const query = q.trim().toUpperCase();
     if (picked && q.includes("—")) return;
@@ -304,7 +475,6 @@ export default function PortfolioPage() {
       try {
         setSugLoading(true);
 
-        // ✅ se já temos o index, autocomplete é local (zero lag)
         if (assetIndex && assetIndex.length > 0) {
           if (!query) {
             setRemoteSug(assetIndex.slice(0, 8).map((x) => x.ticker));
@@ -326,7 +496,6 @@ export default function PortfolioPage() {
           return;
         }
 
-        // fallback remoto (se index não carregou)
         const items = await searchSymbols(query, 8);
         setRemoteSug(items);
       } catch {
@@ -339,7 +508,7 @@ export default function PortfolioPage() {
     return () => window.clearTimeout(t);
   }, [q, picked, assetIndex]);
 
-  // positions = import + manual, removendo tickers deletados
+  // positions = base(import/db) + manual, removendo tickers deletados
   const allPositions: Position[] = useMemo(() => {
     const merged = [...(data?.positions ?? []), ...manualPositions];
     return merged.filter((p) => !removedSet.has((p.ticker ?? "").toUpperCase()));
@@ -359,7 +528,6 @@ export default function PortfolioPage() {
       .sort((a, b) => b.value - a.value);
   }, [allPositions, notesByTicker]);
 
-  // /mnt/data/page.tsx
   const totals = useMemo(() => {
     const byValue: Record<AssetClass, number> = { stocks: 0, fiis: 0, bonds: 0, other: 0 };
     const count: Record<AssetClass, number> = { stocks: 0, fiis: 0, bonds: 0, other: 0 };
@@ -381,7 +549,6 @@ export default function PortfolioPage() {
 
     return { byValue, totalValue, pctValue, count };
   }, [holdings]);
-
 
   const [tab, setTab] = useState<"all" | AssetClass>("all");
 
@@ -406,6 +573,7 @@ export default function PortfolioPage() {
 
   async function onImport() {
     setError(null);
+    setSaveMsg(null);
 
     if (!file) {
       setError("Selecione um arquivo B3 (XLSX) para importar.");
@@ -416,12 +584,13 @@ export default function PortfolioPage() {
       setLoading(true);
       const res = await importB3({ file, noTesouro: false });
       setData(res);
-      setRemovedTickers([]);
-      localStorage.removeItem(LS_REMOVED_KEY);
-      localStorage.setItem(LS_IMPORT_KEY, JSON.stringify(res));
 
-      const nextDefault = pickDefaultName(res.meta?.filename, file.name);
-      setPortfolioName((prev) => (prev.trim() ? prev : nextDefault));
+      // ao importar arquivo, você está editando "estado local"
+      // não muda a carteira selecionada no DB automaticamente.
+      setRemovedTickers([]);
+
+      // permitir re-selecionar o mesmo arquivo depois
+      if (fileInputRef.current) fileInputRef.current.value = "";
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : typeof e === "string" ? e : "Falha ao importar arquivo.";
       setError(msg);
@@ -430,29 +599,9 @@ export default function PortfolioPage() {
     }
   }
 
-  function clearEverything() {
-    setData(null);
-    setFile(null);
-    setError(null);
-
-    setManualPositions([]);
-    setPicked(null);
-    setQ("");
-    setQty("");
-    setManualPrice("");
-    setShowSug(false);
-
-    setNotesByTicker({});
-    setRemovedTickers([]);
-
-    localStorage.removeItem(LS_IMPORT_KEY);
-    localStorage.removeItem(LS_MANUAL_KEY);
-    localStorage.removeItem(LS_NOTES_KEY);
-    localStorage.removeItem(LS_REMOVED_KEY);
-  }
-
   function addManual() {
     setError(null);
+    setSaveMsg(null);
 
     if (!picked) {
       setError("Selecione um ativo válido na lista.");
@@ -466,7 +615,7 @@ export default function PortfolioPage() {
     }
 
     const priceFromInput = manualPrice.trim() ? Number(manualPrice.replace(",", ".")) : undefined;
-    const priceCandidate = priceFromInput ?? picked.price ?? data?.prices?.[picked.ticker] ?? 0;
+    const priceCandidate = priceFromInput ?? picked.price ?? (data?.prices as any)?.[picked.ticker] ?? 0;
 
     if (!Number.isFinite(priceCandidate) || priceCandidate <= 0) {
       setError("Preço inválido. Digite um preço ou garanta que exista no BD.");
@@ -480,7 +629,6 @@ export default function PortfolioPage() {
       price: priceCandidate,
     };
 
-    // se estava removido, restaura
     restoreTicker(pos.ticker);
 
     setManualPositions((prev) => {
@@ -488,12 +636,7 @@ export default function PortfolioPage() {
       if (i === -1) return [...prev, pos];
 
       const copy = [...prev];
-      copy[i] = {
-        ...copy[i],
-        quantity: copy[i].quantity + pos.quantity,
-        price: pos.price,
-        asset_type: pos.asset_type,
-      };
+      copy[i] = { ...copy[i], quantity: (copy[i].quantity ?? 0) + pos.quantity, price: pos.price, asset_type: pos.asset_type };
       return copy;
     });
 
@@ -513,29 +656,22 @@ export default function PortfolioPage() {
     setRemoteSug([]);
     setQ(ticker);
 
-    // reset do preço ao trocar de ativo (mas vamos preencher pelo cache se existir)
     setManualPrice("");
 
-    // preenche instantâneo do cache (class + price)
     setPicked({
       ticker,
       name: ticker,
-      asset_class: meta?.cls ?? "other",
+      asset_class: (meta?.cls as any) ?? "other",
       currency: "BRL",
       price: meta?.price ?? undefined,
     });
 
-    if (meta?.price != null && Number.isFinite(meta.price)) {
-      setManualPrice(String(meta.price));
-    }
+    if (meta?.price != null && Number.isFinite(meta.price)) setManualPrice(String(meta.price));
 
-    // busca preço remoto pra confirmar/atualizar
     try {
       setPriceLoading(true);
-
       const prices = await getRemotePrices([ticker]);
-      const px = prices[ticker];
-
+      const px = (prices as any)[ticker];
       if (px != null && Number.isFinite(px)) {
         setManualPrice(String(px));
         setPicked((prev) => (prev ? { ...prev, price: px } : prev));
@@ -550,10 +686,91 @@ export default function PortfolioPage() {
   function handleBlur() {
     blurTimer.current = window.setTimeout(() => setShowSug(false), 120);
   }
-
   function handleFocus() {
     if (blurTimer.current) window.clearTimeout(blurTimer.current);
     setShowSug(true);
+  }
+
+  async function onSaveToDb() {
+    setError(null);
+    setSaveMsg(null);
+
+    const name = portfolioName.trim();
+    if (!name) {
+      setError("Digite um nome para a carteira.");
+      return;
+    }
+    if (nameTakenByOther) {
+      setError("Já existe uma carteira com esse nome. Escolha outro nome.");
+      return;
+    }
+    if (holdings.length === 0) {
+      setError("Nada para salvar: a carteira está vazia.");
+      return;
+    }
+
+    const manualSet = new Set(manualPositions.map((p) => (p.ticker ?? "").toUpperCase()));
+
+    const positionsPayload = holdings.map((h) => ({
+      ticker: (h.ticker ?? "").toUpperCase(),
+      quantity: Number(h.quantity),
+      price: Number(h.price),
+      cls: toApiAssetClass(h.cls),
+      note: clampNote(notesByTicker[(h.ticker ?? "").toUpperCase()] ?? 10),
+      source: manualSet.has((h.ticker ?? "").toUpperCase()) ? ("manual" as const) : ("import" as const),
+    }));
+
+    try {
+      setSaveLoading(true);
+
+      // update existing
+      if (selectedPortfolioId !== "") {
+        await dbRenamePortfolio(selectedPortfolioId, name);
+        await dbReplacePositions(selectedPortfolioId, positionsPayload);
+        setSaveMsg(`Atualizado! portfolio_id=${selectedPortfolioId}`);
+      } else {
+        // create new
+        const created = await dbCreatePortfolio(name);
+        await dbReplacePositions(created.id, positionsPayload);
+        setSelectedPortfolioId(created.id);
+
+        // refresh list and keep selection consistent
+        await refreshDbPortfolios();
+        setSaveMsg(`Criado! portfolio_id=${created.id}`);
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Falha ao salvar no banco.";
+      setError(msg);
+    } finally {
+      setSaveLoading(false);
+    }
+  }
+
+  async function onDeleteSelectedPortfolio() {
+    setError(null);
+    setSaveMsg(null);
+
+    if (selectedPortfolioId === "") {
+      setError("Selecione uma carteira do banco para excluir.");
+      return;
+    }
+
+    try {
+      setSaveLoading(true);
+      await dbDeletePortfolio(selectedPortfolioId);
+
+      // refresh list
+      await refreshDbPortfolios();
+
+      // go back to "new portfolio"
+      newPortfolio();
+      setSaveMsg("Carteira excluída.");
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
+    } finally {
+      setSaveLoading(false);
+    }
   }
 
   return (
@@ -561,17 +778,91 @@ export default function PortfolioPage() {
       <ConfirmModal
         open={confirmClearOpen}
         title="Tem certeza que deseja limpar a carteira?"
-        description="Isso removerá as posições importadas e os ativos adicionados manualmente neste navegador. Essa ação não pode ser desfeita."
+        description="Isso limpa a edição atual (tela). Não exclui a carteira do banco."
         confirmText="Limpar"
         cancelText="Cancelar"
-        onConfirm={clearEverything}
+        onConfirm={clearEverythingLocalOnly}
         onClose={() => setConfirmClearOpen(false)}
+      />
+
+      <ConfirmModal
+        open={confirmDeleteOpen}
+        title="Excluir carteira do banco?"
+        description="Essa ação remove a carteira e todas as posições/import_runs no banco. Não pode ser desfeita."
+        confirmText="Excluir"
+        cancelText="Cancelar"
+        onConfirm={onDeleteSelectedPortfolio}
+        onClose={() => setConfirmDeleteOpen(false)}
       />
 
       <div className="flex items-baseline justify-between">
         <h1 className="text-2xl font-semibold text-[var(--text-primary)]">Carteira</h1>
-        <div className="text-sm text-[var(--text-muted)]">Importe sua posição e acompanhe alocação</div>
+        <div className="text-sm text-[var(--text-muted)]">Gerencie múltiplas carteiras e acompanhe alocação</div>
       </div>
+
+      {/* Portfolio selector row */}
+      <section className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5">
+        <div className="flex flex-col lg:flex-row lg:items-end gap-3">
+          <div className="flex-1">
+            <label className="block text-sm font-medium text-[var(--text-primary)]">Carteiras (banco)</label>
+            <div className="mt-2 flex flex-col sm:flex-row gap-2">
+              <select
+                value={selectedPortfolioId}
+                onChange={async (e) => {
+                  const v = e.target.value ? Number(e.target.value) : "";
+                  setSelectedPortfolioId(v);
+                  if (v !== "") await loadFromDb(v);
+                }}
+                className="w-full h-10 rounded-xl border border-[var(--border)] bg-[var(--surface-alt)]
+                           px-3 text-sm text-[var(--text-primary)] outline-none"
+              >
+                <option value="">(Nova carteira — ainda não salva)</option>
+                {dbPortfolios.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    #{p.id} — {p.name}
+                  </option>
+                ))}
+              </select>
+
+              <button
+                type="button"
+                onClick={newPortfolio}
+                className="h-10 rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] px-4 text-sm font-semibold
+                           text-[var(--text-primary)] hover:bg-[var(--surface)]"
+              >
+                Nova
+              </button>
+
+              <button
+                type="button"
+                onClick={() => void refreshDbPortfolios()}
+                disabled={dbLoading}
+                className="h-10 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 text-sm
+                           text-[var(--text-primary)] hover:bg-[var(--surface-alt)]
+                           disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {dbLoading ? "Atualizando..." : "Atualizar lista"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteOpen(true)}
+                disabled={saveLoading || selectedPortfolioId === ""}
+                className="h-10 rounded-xl border border-[color:var(--sell)]/40 bg-[var(--surface)] px-4 text-sm font-semibold
+                           text-[color:var(--sell)] hover:bg-[color:var(--sell)]/10
+                           disabled:opacity-60 disabled:cursor-not-allowed"
+                title={selectedPortfolioId === "" ? "Selecione uma carteira do banco" : "Excluir carteira"}
+              >
+                Excluir
+              </button>
+            </div>
+
+            <div className="mt-2 text-xs text-[var(--text-muted)]">
+              Dica: selecione uma carteira para editar e salvar. “Nova” cria uma carteira nova (nome precisa ser único).
+            </div>
+          </div>
+        </div>
+      </section>
 
       <section className="grid grid-cols-1 lg:grid-cols-5 gap-4">
         <div className="lg:col-span-3 bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5 space-y-4">
@@ -597,7 +888,15 @@ export default function PortfolioPage() {
                 </button>
               </div>
 
-              <div className="mt-2 text-xs text-[var(--text-muted)]">Sugestão automática baseada no arquivo importado. Você pode editar.</div>
+              {nameTakenByOther ? (
+                <div className="mt-2 text-xs text-[color:var(--sell)]">
+                  Já existe uma carteira com esse nome (o nome é o identificador). Troque para salvar.
+                </div>
+              ) : (
+                <div className="mt-2 text-xs text-[var(--text-muted)]">
+                  O nome é único e identifica a carteira no banco.
+                </div>
+              )}
             </div>
 
             <div className="hidden md:block md:col-span-3" />
@@ -622,7 +921,13 @@ export default function PortfolioPage() {
                       {file ? file.name : data?.meta?.filename ?? "Nenhum arquivo"}
                     </span>
 
-                    <input type="file" accept=".xlsx" className="hidden" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".xlsx"
+                      className="hidden"
+                      onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                    />
                   </label>
 
                   <button
@@ -635,19 +940,9 @@ export default function PortfolioPage() {
                   </button>
                 </div>
 
-                {data?.warnings?.length ? (
-                  <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
-                    <div className="text-sm font-semibold text-[var(--text-primary)]">Avisos</div>
-                    <ul className="mt-2 space-y-1 text-sm text-[var(--text-muted)]">
-                      {data.warnings.slice(0, 4).map((w, i) => (
-                        <li key={i}>• {w}</li>
-                      ))}
-                      {data.warnings.length > 4 ? <li className="text-xs">+ {data.warnings.length - 4} outros…</li> : null}
-                    </ul>
-                  </div>
-                ) : (
-                  <div className="text-xs text-[var(--text-muted)]">Se o arquivo não for compatível, use o modo manual ao lado.</div>
-                )}
+                <div className="text-xs text-[var(--text-muted)]">
+                  Importar arquivo atualiza a edição da tela. Para gravar no banco, clique em “Salvar no banco”.
+                </div>
               </div>
             </div>
 
@@ -659,7 +954,6 @@ export default function PortfolioPage() {
                 <div className="relative">
                   <label className="block text-xs text-[var(--text-muted)] mb-1">Ativo</label>
 
-                  {/* wrapper relative pra overlay dentro do input */}
                   <div className="relative group">
                     <input
                       value={q}
@@ -675,7 +969,6 @@ export default function PortfolioPage() {
                                  text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-[var(--primary)]/30"
                     />
 
-                    {/* indicador discreto no canto direito, sem mexer layout */}
                     <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
                       {sugLoading || priceLoading || assetIndexLoading ? (
                         <span
@@ -684,18 +977,8 @@ export default function PortfolioPage() {
                         />
                       ) : null}
                     </div>
-
-                    {/* tooltip no hover (não altera layout) */}
-                    {sugLoading || priceLoading || assetIndexLoading ? (
-                      <div className="pointer-events-none absolute right-2 -top-8 hidden group-hover:block">
-                        <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs text-[var(--text-muted)] shadow-lg">
-                          {assetIndexLoading ? "Carregando ativos..." : priceLoading ? "Buscando preço..." : "Buscando sugestões..."}
-                        </div>
-                      </div>
-                    ) : null}
                   </div>
 
-                  {/* dropdown sugestões */}
                   {showSug && !sugLoading && remoteSug.length > 0 ? (
                     <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-lg">
                       {remoteSug.map((ticker) => (
@@ -749,13 +1032,12 @@ export default function PortfolioPage() {
                     Adicionar
                   </button>
                 </div>
-
-
               </div>
             </div>
           </div>
 
           {error ? <div className="text-sm text-[color:var(--sell)]">{error}</div> : null}
+          {saveMsg ? <div className="text-sm text-[var(--text-muted)]">{saveMsg}</div> : null}
         </div>
 
         {/* Right summary */}
@@ -765,24 +1047,18 @@ export default function PortfolioPage() {
             <StatCard title="Ativos" value={String(holdings.length)} hint="Linhas na carteira" />
           </div>
 
-
-        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="text-sm font-semibold text-[var(--text-primary)]">Alocação atual</div>
-
-            {/* opcional: total de linhas */}
-            <div className="text-xs text-[var(--text-muted)]">
-              {holdings.length ? `${holdings.length} ativos` : "sem ativos"}
+          <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-semibold text-[var(--text-primary)]">Alocação atual</div>
+              <div className="text-xs text-[var(--text-muted)]">{holdings.length ? `${holdings.length} ativos` : "sem ativos"}</div>
             </div>
-          </div>
 
-          {holdings.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface-alt)] p-4 text-sm text-[var(--text-muted)]">
-              Nenhum ativo ainda. Importe um XLSX da B3 ou adicione manualmente para ver a alocação.
-            </div>
-          ) : (
-            <div className="grid grid-cols-3 gap-3 text-sm">
-              {totals.count.stocks > 0 ? (
+            {holdings.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface-alt)] p-4 text-sm text-[var(--text-muted)]">
+                Nenhum ativo ainda. Importe um XLSX da B3 ou adicione manualmente para ver a alocação.
+              </div>
+            ) : (
+              <div className="grid grid-cols-3 gap-3 text-sm">
                 <div className="relative rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] p-3 transition">
                   <div className="absolute right-2 top-2 text-[10px] px-2 py-0.5 rounded-full border border-[var(--border)] text-[var(--text-muted)] bg-[var(--surface)]/60">
                     {totals.count.stocks}
@@ -790,14 +1066,7 @@ export default function PortfolioPage() {
                   <div className="text-xs text-[var(--text-muted)]">Ações</div>
                   <div className="mt-1 font-semibold text-[var(--text-primary)]">{fmtPct(totals.pctValue.stocks)}</div>
                 </div>
-              ) : (
-                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] p-3 opacity-50">
-                  <div className="text-xs text-[var(--text-muted)]">Ações</div>
-                  <div className="mt-1 font-semibold text-[var(--text-muted)]">0%</div>
-                </div>
-              )}
 
-              {totals.count.fiis > 0 ? (
                 <div className="relative rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] p-3 transition">
                   <div className="absolute right-2 top-2 text-[10px] px-2 py-0.5 rounded-full border border-[var(--border)] text-[var(--text-muted)] bg-[var(--surface)]/60">
                     {totals.count.fiis}
@@ -805,14 +1074,7 @@ export default function PortfolioPage() {
                   <div className="text-xs text-[var(--text-muted)]">FIIs</div>
                   <div className="mt-1 font-semibold text-[var(--text-primary)]">{fmtPct(totals.pctValue.fiis)}</div>
                 </div>
-              ) : (
-                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] p-3 opacity-50">
-                  <div className="text-xs text-[var(--text-muted)]">FIIs</div>
-                  <div className="mt-1 font-semibold text-[var(--text-muted)]">0%</div>
-                </div>
-              )}
 
-              {totals.count.bonds > 0 ? (
                 <div className="relative rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] p-3 transition">
                   <div className="absolute right-2 top-2 text-[10px] px-2 py-0.5 rounded-full border border-[var(--border)] text-[var(--text-muted)] bg-[var(--surface)]/60">
                     {totals.count.bonds}
@@ -820,18 +1082,19 @@ export default function PortfolioPage() {
                   <div className="text-xs text-[var(--text-muted)]">RF</div>
                   <div className="mt-1 font-semibold text-[var(--text-primary)]">{fmtPct(totals.pctValue.bonds)}</div>
                 </div>
-              ) : (
-                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] p-3 opacity-50">
-                  <div className="text-xs text-[var(--text-muted)]">RF</div>
-                  <div className="mt-1 font-semibold text-[var(--text-muted)]">0%</div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+              </div>
+            )}
+          </div>
 
-
-
+          <button
+            type="button"
+            onClick={onSaveToDb}
+            disabled={saveLoading || nameTakenByOther}
+            className="w-full rounded-2xl bg-[var(--primary)] text-[var(--on-primary)] px-4 py-3 text-sm font-semibold
+                       hover:bg-[var(--primary-hover)] disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {saveLoading ? "Salvando..." : selectedPortfolioId === "" ? "Salvar no banco (criar)" : "Salvar no banco (atualizar)"}
+          </button>
         </div>
       </section>
 
@@ -840,7 +1103,9 @@ export default function PortfolioPage() {
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="space-y-1">
             <div className="text-lg font-semibold text-[var(--text-primary)]">Posições</div>
-            <div className="text-sm text-[var(--text-muted)]">{summarizeMeta(data?.meta ?? null, manualPositions.length)}</div>
+            <div className="text-sm text-[var(--text-muted)]">
+              {data?.meta?.filename ? `Base: ${data.meta.filename}` : "Base: (sem import/DB)"} • {holdings.length} itens
+            </div>
           </div>
 
           <div className="flex items-center gap-2">
@@ -880,83 +1145,80 @@ export default function PortfolioPage() {
                 {filtered.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="p-6 text-center text-[var(--text-muted)]">
-                      {data || manualPositions.length ? "Nenhuma posição nesse filtro." : "Sem dados ainda — importe ou adicione manualmente."}
+                      {data || manualPositions.length ? "Nenhuma posição nesse filtro." : "Sem dados ainda — importe, selecione do banco ou adicione manualmente."}
                     </td>
                   </tr>
                 ) : (
-                  filtered.map((h, idx) => (
-                    <tr key={`${h.ticker}-${idx}`} className="border-t border-[var(--border)] hover:bg-[var(--surface-alt)]/40">
-                      <td className="p-3 font-semibold text-[var(--text-primary)]">{h.ticker}</td>
+                  filtered.map((h, idx) => {
+                    const tk = (h.ticker ?? "").toUpperCase();
+                    const v = notesByTicker[tk] ?? 10;
 
-                      <td className="p-3 align-middle">
-                        <div className="flex items-center justify-center">
-                          <Badge cls={h.cls} />
-                        </div>
-                      </td>
+                    return (
+                      <tr key={`${h.ticker}-${idx}`} className="border-t border-[var(--border)] hover:bg-[var(--surface-alt)]/40">
+                        <td className="p-3 font-semibold text-[var(--text-primary)]">{h.ticker}</td>
 
-                      <td className="p-3 text-right text-[var(--text-primary)]">{fmtQty(h.quantity)}</td>
-                      <td className="p-3 text-right text-[var(--text-primary)]">{fmtMoney(h.price)}</td>
-                      <td className="p-3 text-right font-semibold text-[var(--text-primary)]">{fmtMoney(h.value)}</td>
+                        <td className="p-3 align-middle">
+                          <div className="flex items-center justify-center">
+                            <Badge cls={h.cls} />
+                          </div>
+                        </td>
 
-<td className="p-3 text-center">
-  {(() => {
-    const tk = (h.ticker ?? "").toUpperCase();
-    const v = notesByTicker[tk] ?? 10;
+                        <td className="p-3 text-right text-[var(--text-primary)]">{fmtQty(h.quantity)}</td>
+                        <td className="p-3 text-right text-[var(--text-primary)]">{fmtMoney(h.price)}</td>
+                        <td className="p-3 text-right font-semibold text-[var(--text-primary)]">{fmtMoney(h.value)}</td>
 
-    return (
-      <div className="inline-flex items-center gap-1">
-        <button
-          type="button"
-          onClick={() => setNotesByTicker((prev) => ({ ...prev, [tk]: clampNote((prev[tk] ?? 10) - 1) }))}
-          className="h-8 w-8 rounded-lg border border-[var(--border)] bg-[var(--surface)]
-                     text-[var(--text-primary)] hover:bg-[var(--surface-alt)]"
-          aria-label="Diminuir nota"
-          title="Diminuir"
-        >
-          −
-        </button>
+                        <td className="p-3 text-center">
+                          <div className="inline-flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setNotesByTicker((prev) => ({ ...prev, [tk]: clampNote((prev[tk] ?? 10) - 1) }))}
+                              className="h-8 w-8 rounded-lg border border-[var(--border)] bg-[var(--surface)]
+                                         text-[var(--text-primary)] hover:bg-[var(--surface-alt)]"
+                              aria-label="Diminuir nota"
+                              title="Diminuir"
+                            >
+                              −
+                            </button>
 
-        <input
-          type="number"
-          min={0}
-          max={10}
-          step={1}
-          value={v}
-          onChange={(e) => setNotesByTicker((prev) => ({ ...prev, [tk]: clampNote(Number(e.target.value)) }))}
-          className="w-14 h-8 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 text-sm text-center
-                     text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-[var(--primary)]/30
-                     [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-        />
+                            <input
+                              type="number"
+                              min={0}
+                              max={10}
+                              step={1}
+                              value={v}
+                              onChange={(e) => setNotesByTicker((prev) => ({ ...prev, [tk]: clampNote(Number(e.target.value)) }))}
+                              className="w-14 h-8 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 text-sm text-center
+                                         text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-[var(--primary)]/30
+                                         [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            />
 
-        <button
-          type="button"
-          onClick={() => setNotesByTicker((prev) => ({ ...prev, [tk]: clampNote((prev[tk] ?? 10) + 1) }))}
-          className="h-8 w-8 rounded-lg border border-[var(--border)] bg-[var(--surface)]
-                     text-[var(--text-primary)] hover:bg-[var(--surface-alt)]"
-          aria-label="Aumentar nota"
-          title="Aumentar"
-        >
-          +
-        </button>
-      </div>
-    );
-  })()}
-</td>
+                            <button
+                              type="button"
+                              onClick={() => setNotesByTicker((prev) => ({ ...prev, [tk]: clampNote((prev[tk] ?? 10) + 1) }))}
+                              className="h-8 w-8 rounded-lg border border-[var(--border)] bg-[var(--surface)]
+                                         text-[var(--text-primary)] hover:bg-[var(--surface-alt)]"
+                              aria-label="Aumentar nota"
+                              title="Aumentar"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </td>
 
-
-                      <td className="p-3 text-center">
-                        <button
-                          type="button"
-                          onClick={() => removeTicker(h.ticker)}
-                          title="Remover"
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)]
-                                     text-[var(--text-muted)] hover:text-[color:var(--sell)] hover:border-[color:var(--sell)]/40 hover:bg-[var(--surface-alt)]"
-                        >
-                          ×
-                        </button>
-                      </td>
-                    </tr>
-                  ))
+                        <td className="p-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() => removeTicker(h.ticker)}
+                            title="Remover"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)]
+                                       text-[var(--text-muted)] hover:text-[color:var(--sell)] hover:border-[color:var(--sell)]/40 hover:bg-[var(--surface-alt)]"
+                          >
+                            ×
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
