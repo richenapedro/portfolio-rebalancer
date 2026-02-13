@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 from typing import Any
+from .routers.bd_remote import router as bd_remote_router
 
 from fastapi import (
     BackgroundTasks,
@@ -38,6 +39,7 @@ from .schemas import (
 
 app = FastAPI(title="portfolio-rebalancer API", version="0.1.0")
 
+app.include_router(bd_remote_router)
 app.add_exception_handler(ValueError, value_error_handler)
 app.add_exception_handler(RequestValidationError, validation_error_handler)
 app.middleware("http")(request_id_middleware)
@@ -475,3 +477,4 @@ def api_job_status(job_id: str, request: Request) -> JobStatusResponse:
         error=rec.error,
         request_id=rec.request_id,
     )
+
