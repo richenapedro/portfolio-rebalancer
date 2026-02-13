@@ -13,7 +13,8 @@ dependencies = [
   "fastapi",
   "uvicorn[standard]",
   "python-multipart",
-  "httpx>=0.27"
+  "httpx>=0.27",
+  "pandas>=2.0",
 ]
 
 
