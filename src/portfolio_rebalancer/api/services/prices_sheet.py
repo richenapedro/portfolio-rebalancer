@@ -52,9 +52,15 @@ def get_assets_index() -> list[dict[str, object]]:
     df = _read_prices_df()
 
     if "ticker" not in df.columns:
-        raise ValueError(f"prices_public: coluna 'ticker' não encontrada. colunas={df.columns.tolist()}")
+        raise ValueError(
+            f"prices_public: coluna 'ticker' não encontrada. colunas={df.columns.tolist()}"
+        )
 
-    price_col = "price" if "price" in df.columns else ("current_price" if "current_price" in df.columns else None)
+    price_col = (
+        "price"
+        if "price" in df.columns
+        else ("current_price" if "current_price" in df.columns else None)
+    )
     class_col = "class" if "class" in df.columns else None
 
     by_ticker: dict[str, dict[str, object]] = {}

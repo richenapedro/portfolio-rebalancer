@@ -477,4 +477,3 @@ def api_job_status(job_id: str, request: Request) -> JobStatusResponse:
         error=rec.error,
         request_id=rec.request_id,
     )
-

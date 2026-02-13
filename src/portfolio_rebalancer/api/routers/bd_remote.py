@@ -12,7 +12,9 @@ def prices_ping():
     # confirma leitura do CSV remoto
     items = get_assets_index()
     total = len(items)
-    priced = sum(1 for it in items if isinstance(it.get("price"), (int, float)) and it["price"])
+    priced = sum(
+        1 for it in items if isinstance(it.get("price"), (int, float)) and it["price"]
+    )
     tickers = [it["ticker"] for it in items[:5]]
     return {"ok": True, "tickers": tickers, "total": total, "priced": priced}
 
