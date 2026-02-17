@@ -14,6 +14,21 @@ import { SummaryCards } from "../../components/SummaryCards";
 import { TradesTable } from "../../components/TradesTable";
 import { useI18n } from "@/i18n/I18nProvider";
 
+// ✅ icons
+import {
+  ArrowLeft,
+  ArrowRight,
+  BarChart3,
+  Database,
+  FileUp,
+  Loader2,
+  Play,
+  SlidersHorizontal,
+  Upload,
+  Wallet,
+  X,
+} from "lucide-react";
+
 /* ------------------------- API base (DB endpoints) ------------------------- */
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
@@ -129,8 +144,7 @@ function allocationFromHoldings(rows: HoldingRow[]) {
   let total = 0;
 
   for (const r of rows) {
-    const value =
-      typeof r.value === "number" ? r.value : typeof r.price === "number" ? r.quantity * r.price : 0;
+    const value = typeof r.value === "number" ? r.value : typeof r.price === "number" ? r.quantity * r.price : 0;
 
     const cls = classifyTicker(r.ticker);
     totals[cls] += value;
@@ -158,9 +172,7 @@ function ActionBadge(props: { action: "BUY" | "SELL" | "—" }) {
       ? "bg-[color:var(--buy)]/20 text-[color:var(--buy)] border-[color:var(--buy)]/30"
       : "bg-[color:var(--sell)]/20 text-[color:var(--sell)] border-[color:var(--sell)]/30";
 
-  return (
-    <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold ${cls}`}>{a}</span>
-  );
+  return <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold ${cls}`}>{a}</span>;
 }
 
 function AllocationBreakdownCard(props: {
@@ -183,17 +195,13 @@ function AllocationBreakdownCard(props: {
       <div className="flex items-baseline justify-between mb-2">
         <div className="text-xs font-semibold text-[var(--text-primary)]">{props.title}</div>
         <div className="text-[11px] text-[var(--text-muted)]">
-          {props.labels.total}:{" "}
-          <span className="font-mono text-[var(--text-primary)]">{props.fmtMoney(data.total)}</span>
+          {props.labels.total}: <span className="font-mono text-[var(--text-primary)]">{props.fmtMoney(data.total)}</span>
         </div>
       </div>
 
       <div className="grid grid-cols-3 gap-2">
         {items.map((it) => (
-          <div
-            key={it.key}
-            className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-2"
-          >
+          <div key={it.key} className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-2">
             <div className="text-[11px] text-[var(--text-muted)]">{it.label}</div>
             <div className="font-mono text-sm text-[var(--text-primary)]">{props.fmtPct(data.pct[it.key])}</div>
           </div>
@@ -225,10 +233,7 @@ function HoldingsBeforeTable(props: {
     allocBonds: string;
   };
 }) {
-  const total = useMemo(
-    () => props.rows.reduce((acc: number, r: UnifiedRow) => acc + (r.before.value ?? 0), 0),
-    [props.rows],
-  );
+  const total = useMemo(() => props.rows.reduce((acc: number, r: UnifiedRow) => acc + (r.before.value ?? 0), 0), [props.rows]);
 
   const bodyRef = useRef<HTMLDivElement | null>(null);
 
@@ -239,10 +244,12 @@ function HoldingsBeforeTable(props: {
   return (
     <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-4 flex flex-col h-full">
       <div className="flex items-baseline justify-between mb-3">
-        <h3 className="font-semibold text-[var(--text-primary)]">{props.title}</h3>
+        <h3 className="font-semibold text-[var(--text-primary)] flex items-center gap-2">
+          <ArrowLeft className="h-4 w-4 text-[var(--text-muted)]" aria-hidden />
+          {props.title}
+        </h3>
         <div className="text-xs text-[var(--text-muted)]">
-          {props.labels.total}:{" "}
-          <span className="font-mono text-[var(--text-primary)]">{props.fmtMoney(total)}</span>
+          {props.labels.total}: <span className="font-mono text-[var(--text-primary)]">{props.fmtMoney(total)}</span>
         </div>
       </div>
 
@@ -326,10 +333,7 @@ function HoldingsAfterTable(props: {
     allocBonds: string;
   };
 }) {
-  const total = useMemo(
-    () => props.rows.reduce((acc: number, r: UnifiedRow) => acc + (r.after.value ?? 0), 0),
-    [props.rows],
-  );
+  const total = useMemo(() => props.rows.reduce((acc: number, r: UnifiedRow) => acc + (r.after.value ?? 0), 0), [props.rows]);
 
   const bodyRef = useRef<HTMLDivElement | null>(null);
 
@@ -340,10 +344,12 @@ function HoldingsAfterTable(props: {
   return (
     <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-4 flex flex-col h-full">
       <div className="flex items-baseline justify-between mb-3">
-        <h3 className="font-semibold text-[var(--text-primary)]">{props.title}</h3>
+        <h3 className="font-semibold text-[var(--text-primary)] flex items-center gap-2">
+          <ArrowRight className="h-4 w-4 text-[var(--text-muted)]" aria-hidden />
+          {props.title}
+        </h3>
         <div className="text-xs text-[var(--text-muted)]">
-          {props.labels.total}:{" "}
-          <span className="font-mono text-[var(--text-primary)]">{props.fmtMoney(total)}</span>
+          {props.labels.total}: <span className="font-mono text-[var(--text-primary)]">{props.fmtMoney(total)}</span>
         </div>
       </div>
 
@@ -417,10 +423,7 @@ export default function RebalancePage() {
     () => (n: number) => new Intl.NumberFormat(lang, { style: "currency", currency: "BRL" }).format(n),
     [lang],
   );
-  const fmtQty = useMemo(
-    () => (n: number) => new Intl.NumberFormat(lang, { maximumFractionDigits: 8 }).format(n),
-    [lang],
-  );
+  const fmtQty = useMemo(() => (n: number) => new Intl.NumberFormat(lang, { maximumFractionDigits: 8 }).format(n), [lang]);
   const fmtPct = useMemo(
     () => (n: number) => new Intl.NumberFormat(lang, { maximumFractionDigits: 1 }).format(n) + "%",
     [lang],
@@ -650,7 +653,7 @@ export default function RebalancePage() {
 
   const hasHoldings = holdingsBefore.length > 0 || holdingsAfter.length > 0;
 
-  // ✅ CHANGED: only show the portfolio name (no id)
+  // ✅ only show the portfolio name (no id)
   const selectedDbLabel = useMemo(() => {
     if (selectedDbId === "") return null;
     const p = dbPortfolios.find((x) => x.id === selectedDbId);
@@ -671,10 +674,16 @@ export default function RebalancePage() {
     total: t("rebalance.common.total"),
   };
 
+  const SourceIcon =
+    importSource === "file" ? Upload : importSource === "db" ? Database : Upload;
+
   return (
     <main className="space-y-6">
       <div className="flex items-baseline justify-between">
-        <h1 className="text-2xl font-semibold text-[var(--text-primary)]">{t("rebalance.title")}</h1>
+        <h1 className="text-2xl font-semibold text-[var(--text-primary)] flex items-center gap-2">
+          <SlidersHorizontal className="h-5 w-5 text-[var(--text-muted)]" aria-hidden />
+          {t("rebalance.title")}
+        </h1>
         <div className="text-sm text-[var(--text-muted)]">{t("rebalance.subtitle")}</div>
       </div>
 
@@ -682,7 +691,10 @@ export default function RebalancePage() {
         <div className="lg:col-span-3 bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5 space-y-4">
           {/* Unified import row */}
           <div className="space-y-2">
-            <label className="block text-sm font-medium text-[var(--text-primary)]">{t("rebalance.import.label")}</label>
+            <label className="block text-sm font-medium text-[var(--text-primary)] flex items-center gap-2">
+              <Upload className="h-4 w-4 text-[var(--text-muted)]" aria-hidden />
+              {t("rebalance.import.label")}
+            </label>
 
             <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 items-stretch">
               <select
@@ -730,7 +742,10 @@ export default function RebalancePage() {
                            disabled:opacity-50 disabled:cursor-not-allowed"
                 title={t("rebalance.import.fileBtnTitle")}
               >
-                {t("rebalance.import.fileBtn")}
+                <span className="inline-flex items-center gap-2">
+                  <FileUp className="h-4 w-4" aria-hidden />
+                  {t("rebalance.import.fileBtn")}
+                </span>
                 <input
                   type="file"
                   accept=".xlsx"
@@ -782,26 +797,28 @@ export default function RebalancePage() {
 
               {importSource === "file" ? (
                 <span
-                  className="inline-flex items-center rounded-full border border-[var(--border)]
+                  className="inline-flex items-center gap-2 rounded-full border border-[var(--border)]
                              bg-[var(--surface-alt)] px-2.5 py-1 text-xs text-[var(--text-primary)]
                              cursor-help"
                   title={t("rebalance.import.fileChipTitle")}
                 >
+                  <SourceIcon className="h-4 w-4 text-[var(--text-muted)]" aria-hidden />
                   {sourceLabel}
                 </span>
               ) : importSource === "db" ? (
                 <span
-                  className="inline-flex items-center rounded-full border border-[var(--border)]
+                  className="inline-flex items-center gap-2 rounded-full border border-[var(--border)]
                              bg-[var(--surface-alt)] px-2.5 py-1 text-xs text-[var(--text-primary)]"
                 >
+                  <SourceIcon className="h-4 w-4 text-[var(--text-muted)]" aria-hidden />
                   {sourceLabel} {selectedDbLabel ? `(${selectedDbLabel})` : ""}
                 </span>
               ) : (
                 <span
-                  className="inline-flex items-center rounded-full border border-[var(--border)]
+                  className="inline-flex items-center gap-2 rounded-full border border-[var(--border)]
                              bg-[var(--surface-alt)] px-2.5 py-1 text-xs text-[var(--text-muted)]"
                 >
-                  —
+                  <SourceIcon className="h-4 w-4 text-[var(--text-muted)]" aria-hidden />—
                 </span>
               )}
 
@@ -816,8 +833,9 @@ export default function RebalancePage() {
                     setImportSource(null);
                     setSelectedDbId("");
                   }}
-                  className="ml-auto text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                  className="ml-auto inline-flex items-center gap-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                 >
+                  <X className="h-4 w-4" aria-hidden />
                   {t("common.remove")}
                 </button>
               )}
@@ -828,7 +846,10 @@ export default function RebalancePage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-2">
-              <label className="block text-sm font-medium text-[var(--text-primary)]">{t("rebalance.controls.cash")}</label>
+              <label className="block text-sm font-medium text-[var(--text-primary)] flex items-center gap-2">
+                <Wallet className="h-4 w-4 text-[var(--text-muted)]" aria-hidden />
+                {t("rebalance.controls.cash")}
+              </label>
               <input
                 type="number"
                 value={cash}
@@ -846,7 +867,10 @@ export default function RebalancePage() {
             </div>
 
             <div className="space-y-2">
-              <label className="block text-sm font-medium text-[var(--text-primary)]">{t("rebalance.controls.mode")}</label>
+              <label className="block text-sm font-medium text-[var(--text-primary)] flex items-center gap-2">
+                <SlidersHorizontal className="h-4 w-4 text-[var(--text-muted)]" aria-hidden />
+                {t("rebalance.controls.mode")}
+              </label>
               <select
                 value={mode}
                 onChange={(e) => {
@@ -875,12 +899,7 @@ export default function RebalancePage() {
                          hover:bg-[var(--primary-hover)] transition-colors
                          disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading && (
-                <span
-                  className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-[color:var(--on-primary)]/30 border-t-[color:var(--on-primary)]"
-                  aria-hidden
-                />
-              )}
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Play className="h-4 w-4" aria-hidden />}
               {loading ? t("rebalance.run.running") : t("rebalance.run.run")}
             </button>
 
@@ -894,7 +913,10 @@ export default function RebalancePage() {
 
         <div className="lg:col-span-2 bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5">
           <div className="mb-3">
-            <div className="text-sm font-semibold text-[var(--text-primary)]">{t("rebalance.target.title")}</div>
+            <div className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-2">
+              <SlidersHorizontal className="h-4 w-4 text-[var(--text-muted)]" aria-hidden />
+              {t("rebalance.target.title")}
+            </div>
           </div>
           <AllocationSliders value={weights} onChange={setWeights} />
         </div>
@@ -912,9 +934,16 @@ export default function RebalancePage() {
       {job?.status === "done" && summaryFromApi && (
         <section className="space-y-4">
           <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5">
-            <h2 className="font-semibold text-[var(--text-primary)] mb-3">{t("rebalance.summary.title")}</h2>
+            <h2 className="font-semibold text-[var(--text-primary)] mb-3 flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-[var(--text-muted)]" aria-hidden />
+              {t("rebalance.summary.title")}
+            </h2>
             <div className="grid items-stretch">
-              <SummaryCards summary={summaryFromApi} holdingsTotalBefore={holdingsTotalBefore} holdingsTotalAfter={holdingsTotalAfter} />
+              <SummaryCards
+                summary={summaryFromApi}
+                holdingsTotalBefore={holdingsTotalBefore}
+                holdingsTotalAfter={holdingsTotalAfter}
+              />
             </div>
           </div>
 

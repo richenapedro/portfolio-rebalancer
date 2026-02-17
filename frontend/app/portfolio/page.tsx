@@ -1,6 +1,9 @@
 /* page.tsx */
 "use client";
 
+import { Plus, Trash2, Upload, Save, BarChart3, Wallet, Database, Minus, FileUp } from "lucide-react";
+
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   importB3,
@@ -184,7 +187,7 @@ function Badge(props: { cls: AssetClass; label: string }) {
   );
 }
 
-function StatCard(props: { title: string; value: string; hint?: string; className?: string }) {
+function StatCard(props: { title: React.ReactNode; value: string; hint?: string; className?: string }) {
   return (
     <div className={["bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-4", props.className ?? ""].join(" ")}>
       <div className="text-xs text-[var(--text-muted)]">{props.title}</div>
@@ -837,7 +840,11 @@ export default function PortfolioPage() {
       />
 
       <div className="flex items-baseline justify-between">
-        <h1 className="text-2xl font-semibold text-[var(--text-primary)]">{t("portfolio.title")}</h1>
+        <h1 className="text-2xl font-semibold text-[var(--text-primary)] flex items-center gap-2">
+          <Wallet size={22} />
+          {t("portfolio.title")}
+        </h1>
+
         <div className="text-sm text-[var(--text-muted)]">{t("portfolio.subtitle")}</div>
       </div>
 
@@ -848,31 +855,45 @@ export default function PortfolioPage() {
             <div className="flex flex-col gap-3 h-full">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="text-sm font-semibold text-[var(--text-primary)]">{t("portfolio.db.title")}</div>
+                  <div className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-2">
+                    <Database size={16} />
+                    {t("portfolio.db.title")}
+                  </div>
                   <div className="mt-1 text-xs text-[var(--text-muted)]">{t("portfolio.db.hint")}</div>
                 </div>
 
                 <div className="shrink-0 flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={newPortfolioLocal}
-                    className="h-10 rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] px-4 text-sm font-semibold
-                              text-[var(--text-primary)] hover:bg-[var(--surface)]"
-                  >
-                    {t("common.new")}
-                  </button>
+                <button
+                  type="button"
+                  onClick={newPortfolioLocal}
+                  className="h-10 inline-flex items-center justify-center gap-2 rounded-xl
+                            border border-[var(--border)] bg-[var(--surface-alt)] px-4 text-sm font-semibold
+                            text-[var(--text-primary)] hover:bg-[var(--surface)]"
+                >
+                  <Plus className="h-4 w-4 shrink-0" />
+                  {t("common.new")}
+                </button>
 
-                  <button
-                    type="button"
-                    onClick={() => setConfirmDeleteOpen(true)}
-                    disabled={saveLoading || selectedPortfolioId === ""}
-                    className="h-10 rounded-xl border border-[color:var(--sell)]/40 bg-[var(--surface)] px-4 text-sm font-semibold
-                              text-[color:var(--sell)] hover:bg-[color:var(--sell)]/10
-                              disabled:opacity-60 disabled:cursor-not-allowed"
-                    title={selectedPortfolioId === "" ? (lang === "pt-BR" ? "Selecione uma carteira do banco" : "Select a DB portfolio") : t("common.delete")}
-                  >
-                    {t("common.delete")}
-                  </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmDeleteOpen(true)}
+                  disabled={saveLoading || selectedPortfolioId === ""}
+                  className="h-10 inline-flex items-center justify-center gap-2 rounded-xl
+                            border border-[color:var(--sell)]/40 bg-[var(--surface)] px-4 text-sm font-semibold
+                            text-[color:var(--sell)] hover:bg-[color:var(--sell)]/10
+                            disabled:opacity-60 disabled:cursor-not-allowed"
+                  title={
+                    selectedPortfolioId === ""
+                      ? lang === "pt-BR"
+                        ? "Selecione uma carteira do banco"
+                        : "Select a DB portfolio"
+                      : t("common.delete")
+                  }
+                >
+                  <Trash2 className="h-4 w-4 shrink-0" />
+                  {t("common.delete")}
+                </button>
+
                 </div>
               </div>
 
@@ -907,13 +928,23 @@ export default function PortfolioPage() {
           <div className="h-full grid grid-cols-2 gap-4">
             <StatCard
               className="h-full flex flex-col justify-between"
-              title={lang === "pt-BR" ? "Total investido" : "Total invested"}
+              title={
+                <span className="flex items-center gap-2">
+                <BarChart3 size={16} />
+                {lang === "pt-BR" ? "Total investido" : "Total invested"}
+                </span>
+              }
               value={fmtMoney(totals.totalValue)}
               hint={lang === "pt-BR" ? "Somente posições (sem caixa)" : "Holdings only (no cash)"}
             />
             <StatCard
               className="h-full flex flex-col justify-between"
-              title={lang === "pt-BR" ? "Ativos" : "Assets"}
+                title={
+                  <span className="flex items-center gap-2">
+                    <Wallet size={16} />
+                    {lang === "pt-BR" ? "Ativos" : "Assets"}
+                  </span>
+                }
               value={String(holdings.length)}
               hint={lang === "pt-BR" ? "Linhas na carteira" : "Rows in portfolio"}
             />
@@ -963,7 +994,11 @@ export default function PortfolioPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Import card */}
             <div className="bg-[var(--surface-alt)] border border-[var(--border)] rounded-2xl p-4 space-y-3">
-              <div className="text-sm font-semibold text-[var(--text-primary)]">{t("portfolio.importCard.title")}</div>
+            <div className="text-sm font-semibold text-[var(--text-primary)] inline-flex items-center gap-2">
+              <FileUp className="h-4 w-4 shrink-0 text-[var(--text-muted)]" />
+              {t("portfolio.importCard.title")}
+            </div>
+
 
               <div className="space-y-2">
                 <label className="block text-xs text-[var(--text-muted)]">{t("portfolio.importCard.fileLabel")}</label>
@@ -991,11 +1026,16 @@ export default function PortfolioPage() {
                   <button
                     onClick={onImport}
                     disabled={loading}
-                    className="rounded-xl bg-[var(--primary)] text-[var(--on-primary)] px-4 py-2 text-sm font-semibold
-                               hover:bg-[var(--primary-hover)] disabled:opacity-60 disabled:cursor-not-allowed"
+                    className="inline-flex items-center justify-center gap-2 rounded-xl
+                              bg-[var(--primary)] text-[var(--on-primary)]
+                              px-4 py-2 text-sm font-semibold
+                              hover:bg-[var(--primary-hover)]
+                              disabled:opacity-60 disabled:cursor-not-allowed"
                   >
+                    <Upload className="h-4 w-4 shrink-0" />
                     {loading ? t("portfolio.importCard.importing") : t("portfolio.importCard.importBtn")}
                   </button>
+
                 </div>
 
                 <div className="text-xs text-[var(--text-muted)]">{t("portfolio.importCard.hint")}</div>
@@ -1004,7 +1044,11 @@ export default function PortfolioPage() {
 
             {/* Manual card */}
             <div className="bg-[var(--surface-alt)] border border-[var(--border)] rounded-2xl p-4 space-y-3">
-              <div className="text-sm font-semibold text-[var(--text-primary)]">{t("portfolio.manualCard.title")}</div>
+              <div className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-2">
+                <Plus size={16} />
+                {t("portfolio.manualCard.title")}
+              </div>
+
 
               <div className="grid grid-cols-1 gap-3">
                 <div className="relative">
@@ -1094,11 +1138,15 @@ export default function PortfolioPage() {
                   <button
                     type="button"
                     onClick={addManual}
-                    className="rounded-xl bg-[var(--primary)] text-[var(--on-primary)] px-4 py-2 text-sm font-semibold
-                               hover:bg-[var(--primary-hover)]"
+                    className="inline-flex items-center justify-center gap-2 rounded-xl
+                              bg-[var(--primary)] text-[var(--on-primary)]
+                              px-4 py-2 text-sm font-semibold
+                              hover:bg-[var(--primary-hover)]"
                   >
+                    <Plus className="h-4 w-4 shrink-0" />
                     {t("common.add")}
                   </button>
+
                 </div>
               </div>
             </div>
@@ -1155,11 +1203,20 @@ export default function PortfolioPage() {
             type="button"
             onClick={onSaveToDb}
             disabled={saveLoading || nameTakenByOther}
-            className="w-full rounded-2xl bg-[var(--primary)] text-[var(--on-primary)] px-4 py-3 text-sm font-semibold
-                       hover:bg-[var(--primary-hover)] disabled:opacity-60 disabled:cursor-not-allowed"
+            className="w-full inline-flex items-center justify-center gap-2 rounded-2xl
+                      bg-[var(--primary)] text-[var(--on-primary)]
+                      px-4 py-3 text-sm font-semibold
+                      hover:bg-[var(--primary-hover)]
+                      disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            {saveLoading ? t("portfolio.save.saving") : selectedPortfolioId === "" ? t("portfolio.save.create") : t("portfolio.save.update")}
+            <Save className="h-5 w-5 shrink-0" />
+            {saveLoading
+              ? t("portfolio.save.saving")
+              : selectedPortfolioId === ""
+                ? t("portfolio.save.create")
+                : t("portfolio.save.update")}
           </button>
+
         </div>
       </section>
 
@@ -1167,7 +1224,10 @@ export default function PortfolioPage() {
       <section className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5 space-y-4">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="space-y-1">
-            <div className="text-lg font-semibold text-[var(--text-primary)]">{t("portfolio.holdings.title")}</div>
+            <div className="text-lg font-semibold text-[var(--text-primary)] flex items-center gap-2">
+              <BarChart3 size={18} />
+              {t("portfolio.holdings.title")}
+            </div>
             <div className="text-sm text-[var(--text-muted)]">
               {(data?.meta?.filename ? t("portfolio.holdings.baseWith", { filename: data.meta.filename }) : t("portfolio.holdings.baseNone"))} •{" "}
               {t("portfolio.holdings.items", { count: holdings.length })}
@@ -1249,7 +1309,7 @@ export default function PortfolioPage() {
                               aria-label={lang === "pt-BR" ? "Diminuir nota" : "Decrease note"}
                               title={lang === "pt-BR" ? "Diminuir" : "Decrease"}
                             >
-                              −
+                              <Minus size={14} />
                             </button>
 
                             <input
@@ -1272,7 +1332,7 @@ export default function PortfolioPage() {
                               aria-label={lang === "pt-BR" ? "Aumentar nota" : "Increase note"}
                               title={lang === "pt-BR" ? "Aumentar" : "Increase"}
                             >
-                              +
+                              <Plus size={14} />
                             </button>
                           </div>
                         </td>
@@ -1285,7 +1345,7 @@ export default function PortfolioPage() {
                             className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)]
                                        text-[var(--text-muted)] hover:text-[color:var(--sell)] hover:border-[color:var(--sell)]/40 hover:bg-[var(--surface-alt)]"
                           >
-                            ×
+                            <Trash2 size={16} />
                           </button>
                         </td>
                       </tr>
