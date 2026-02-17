@@ -27,6 +27,49 @@ export type Dict = {
   portfolio: {
     title: string;
     subtitle: string;
+    // dentro de type Dict { portfolio: { ... } }
+
+    defaults: {
+    portfolioName: string;
+    };
+
+    stats: {
+    totalInvested: string;
+    assets: string;
+    };
+
+    placeholders: {
+    ticker: string;
+    qty: string;
+    priceOpt: string;
+    };
+
+    errors: {
+    importNoFile: string;
+    importFailed: string;
+    manualPickValid: string;
+    manualInvalidQty: string;
+    manualInvalidPrice: string;
+    saveNeedName: string;
+    saveNameTaken: string;
+    saveEmpty: string;
+    saveFailed: string;
+    deleteNeedSelect: string;
+    deleteDone: string;
+    };
+
+    misc: {
+    noAssets: string;
+    noPositionsInFilter: string;
+    noDataYet: string;
+    noteDecrease: string;
+    noteIncrease: string;
+    remove: string;
+    loadingAssets: string;
+    fetchingPrice: string;
+    searching: string;
+    selectDbPortfolio: string;
+    };
 
     db: {
       title: string;
@@ -212,17 +255,54 @@ export const en: Dict = {
   portfolio: {
     title: "Portfolio",
     subtitle: "Manage multiple portfolios and track allocation",
+    defaults: {
+    portfolioName: "My portfolio",
+    },
+    stats: {
+    totalInvested: "Total invested",
+    assets: "Assets",
+    },
+    placeholders: {
+    ticker: "Type ticker (e.g., HGLG11, VALE3...)",
+    qty: "e.g. 10",
+    priceOpt: "uses DB/Prices if empty",
+    },
+    errors: {
+    importNoFile: "Select a B3 XLSX file to import.",
+    importFailed: "Failed to import file.",
+    manualPickValid: "Pick a valid asset from the list.",
+    manualInvalidQty: "Invalid quantity.",
+    manualInvalidPrice: "Invalid price. Enter a price or ensure it exists in the DB.",
+    saveNeedName: "Enter a portfolio name.",
+    saveNameTaken: "A portfolio with this name already exists. Choose another name.",
+    saveEmpty: "Nothing to save: the portfolio is empty.",
+    saveFailed: "Failed to save to DB.",
+    deleteNeedSelect: "Select a portfolio from the DB to delete.",
+    deleteDone: "Portfolio deleted.",
+    },
+    misc: {
+    noAssets: "no assets",
+    noPositionsInFilter: "No positions in this filter.",
+    noDataYet: "No data yet — import, pick from DB or add manually.",
+    noteDecrease: "Decrease",
+    noteIncrease: "Increase",
+    remove: "Remove",
+    loadingAssets: "Loading assets...",
+    fetchingPrice: "Fetching price...",
+    searching: "Searching...",
+    selectDbPortfolio: "Select a DB portfolio",
+    },
 
     db: {
       title: "Portfolios (database)",
       hint: "The list refreshes when you open/return to the tab and when saving/creating/deleting.",
       updating: "Updating list…",
-      unsavedNew: "(New portfolio — not saved yet)",
+      unsavedNew: "(New portfolio)",
     },
 
     form: {
       nameLabel: "Portfolio name",
-      uniqueHint: "The name is unique and identifies the portfolio in the database.",
+      uniqueHint: "",
       clearBtn: "Clear portfolio",
     },
 
@@ -239,7 +319,7 @@ export const en: Dict = {
       title: "Add manually",
       asset: "Asset",
       quantity: "Quantity",
-      priceOpt: "Price (optional)",
+      priceOpt: "Price",
     },
 
     allocation: {
@@ -253,8 +333,8 @@ export const en: Dict = {
 
     save: {
       saving: "Saving...",
-      create: "Save to DB (create)",
-      update: "Save to DB (update)",
+      create: "Save Portfolio",
+      update: "Update Portfolio",
     },
 
     holdings: {
@@ -394,17 +474,54 @@ export const ptBR: Dict = {
   portfolio: {
     title: "Carteira",
     subtitle: "Gerencie múltiplas carteiras e acompanhe alocação",
+    defaults: {
+    portfolioName: "Minha carteira",
+    },
+    stats: {
+    totalInvested: "Total investido",
+    assets: "Ativos",
+    },
+    placeholders: {
+    ticker: "Digite ticker (ex.: HGLG11, VALE3...)",
+    qty: "ex.: 10",
+    priceOpt: "usa BD/Prices se vazio",
+    },
+    errors: {
+    importNoFile: "Selecione um arquivo B3 (XLSX) para importar.",
+    importFailed: "Falha ao importar arquivo.",
+    manualPickValid: "Selecione um ativo válido na lista.",
+    manualInvalidQty: "Quantidade inválida.",
+    manualInvalidPrice: "Preço inválido. Digite um preço ou garanta que exista no BD.",
+    saveNeedName: "Digite um nome para a carteira.",
+    saveNameTaken: "Já existe uma carteira com esse nome. Escolha outro nome.",
+    saveEmpty: "Nada para salvar: a carteira está vazia.",
+    saveFailed: "Falha ao salvar no banco.",
+    deleteNeedSelect: "Selecione uma carteira do banco para excluir.",
+    deleteDone: "Carteira excluída.",
+    },
+    misc: {
+    noAssets: "sem ativos",
+    noPositionsInFilter: "Nenhuma posição nesse filtro.",
+    noDataYet: "Sem dados ainda — importe, selecione do banco ou adicione manualmente.",
+    noteDecrease: "Diminuir",
+    noteIncrease: "Aumentar",
+    remove: "Remover",
+    loadingAssets: "Carregando ativos...",
+    fetchingPrice: "Buscando preço...",
+    searching: "Buscando sugestões...",
+    selectDbPortfolio: "Selecione uma carteira do banco",
+    },
 
     db: {
       title: "Carteiras (banco)",
       hint: "A lista atualiza ao abrir/voltar pra aba e ao salvar/criar/excluir.",
       updating: "Atualizando lista…",
-      unsavedNew: "(Nova carteira — ainda não salva)",
+      unsavedNew: "(Nova carteira)",
     },
 
     form: {
       nameLabel: "Nome da carteira",
-      uniqueHint: "O nome é único e identifica a carteira no banco.",
+      uniqueHint: "",
       clearBtn: "Limpar carteira",
     },
 
@@ -421,7 +538,7 @@ export const ptBR: Dict = {
       title: "Adicionar manualmente",
       asset: "Ativo",
       quantity: "Quantidade",
-      priceOpt: "Preço (opcional)",
+      priceOpt: "Preço",
     },
 
     allocation: {
@@ -435,8 +552,8 @@ export const ptBR: Dict = {
 
     save: {
       saving: "Salvando...",
-      create: "Salvar no banco (criar)",
-      update: "Salvar no banco (atualizar)",
+      create: "Criar Carteira",
+      update: "Atualizar Carteira",
     },
 
     holdings: {
