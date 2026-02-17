@@ -66,7 +66,6 @@ def _startup():
     init_db(PORTFOLIO_DB_PATH)
 
 
-app.include_router(bd_remote_router)
 app.include_router(portfolio_db_router)
 
 
@@ -106,8 +105,8 @@ def _build_equal_weight_targets(positions: list[Position]) -> dict[str, float]:
 @app.post("/api/import")
 async def api_import(
     file: UploadFile = File(...),
-    user_id: str = "default",
-    no_tesouro: bool = False,
+    user_id: str = Form("default"),
+    no_tesouro: bool = Form(False),
 ) -> dict[str, Any]:
     """
     Upload do XLSX da B3 (Posição).

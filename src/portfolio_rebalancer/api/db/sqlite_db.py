@@ -27,7 +27,8 @@ def connect(db_path: str):
 
 def init_db(db_path: str) -> None:
     with connect(db_path) as conn:
-        conn.executescript("""
+        conn.executescript(
+            """
             CREATE TABLE IF NOT EXISTS portfolio (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
@@ -57,7 +58,8 @@ def init_db(db_path: str) -> None:
 
             CREATE INDEX IF NOT EXISTS idx_position_portfolio ON position(portfolio_id);
             CREATE INDEX IF NOT EXISTS idx_import_run_portfolio ON import_run(portfolio_id);
-            """)
+            """
+        )
 
 
 # ---------- Portfolio CRUD ----------
