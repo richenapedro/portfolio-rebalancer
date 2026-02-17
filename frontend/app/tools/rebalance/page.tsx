@@ -650,14 +650,19 @@ export default function RebalancePage() {
 
   const hasHoldings = holdingsBefore.length > 0 || holdingsAfter.length > 0;
 
+  // ✅ CHANGED: only show the portfolio name (no id)
   const selectedDbLabel = useMemo(() => {
     if (selectedDbId === "") return null;
     const p = dbPortfolios.find((x) => x.id === selectedDbId);
-    return p ? `#${p.id} — ${p.name}` : `#${selectedDbId}`;
+    return p ? p.name : null;
   }, [selectedDbId, dbPortfolios]);
 
   const sourceLabel =
-    importSource === "file" ? t("rebalance.import.sourceFile") : importSource === "db" ? t("rebalance.import.sourceDb") : "—";
+    importSource === "file"
+      ? t("rebalance.import.sourceFile")
+      : importSource === "db"
+        ? t("rebalance.import.sourceDb")
+        : "—";
 
   const allocLabels = {
     stocks: t("rebalance.allocation.stocks"),
@@ -712,7 +717,7 @@ export default function RebalancePage() {
 
                 {dbPortfolios.map((p) => (
                   <option key={p.id} value={p.id}>
-                    #{p.id} — {p.name}
+                    {p.name}
                   </option>
                 ))}
               </select>
