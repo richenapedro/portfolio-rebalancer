@@ -238,6 +238,21 @@ function ConfirmModal(props: {
   );
 }
 
+function clampNote(v: number) {
+  if (!Number.isFinite(v)) return 10;
+  if (v < 0) return 0;
+  if (v > 10) return 10;
+  return Math.round(v);
+}
+
+function toApiAssetClass(cls: AssetClass): ApiAssetClass {
+  return cls;
+}
+
+function toAssetClass(v: unknown): AssetClass {
+  return v === "stocks" || v === "fiis" || v === "bonds" || v === "other" ? v : "other";
+}
+
 /* --------------------------------- page ----------------------------------- */
 
 export default function PortfolioPage() {
@@ -393,12 +408,12 @@ export default function PortfolioPage() {
     try {
       setLoading(true);
 
-      const p = dbPortfolios.find((x: DbPortfolio) => x.id === portfolioId);
-      setPortfolioName(p?.name ?? `Portfolio #${portfolioId}`);
+      const p = dbPortfolios.find((x) => x.id === portfolioId);
+      setPortfolioName(p?.name ?? `Carteira #${portfolioId}`);
 
       const rows = await dbGetPositions(portfolioId);
 
-      const positions: Position[] = rows.map((r: DbPositionRow) => ({
+      const positions: Position[] = rows.map((r) => ({
         ticker: String(r.ticker ?? "").toUpperCase(),
         quantity: Number(r.quantity ?? 0),
         price: r.price == null ? 0 : Number(r.price),
@@ -755,7 +770,7 @@ export default function PortfolioPage() {
         await dbRenamePortfolio(selectedPortfolioId, name);
         await dbReplacePositions(selectedPortfolioId, positionsPayload);
         await refreshDbPortfolios();
-        setSaveMsg(`Updated! portfolio_id=${selectedPortfolioId}`);
+        setSaveMsg(`Atualizado! portfolio_id=${selectedPortfolioId}`);
       } else {
         const created = await dbCreatePortfolio(name);
         await dbReplacePositions(created.id, positionsPayload);
@@ -784,8 +799,8 @@ export default function PortfolioPage() {
       setSaveLoading(true);
       await dbDeletePortfolio(selectedPortfolioId);
       await refreshDbPortfolios();
-      newPortfolioLocal();
-      setSaveMsg(lang === "pt-BR" ? "Carteira excluída." : "Portfolio deleted.");
+      newPortfolio();
+      setSaveMsg("Carteira excluída.");
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
@@ -841,25 +856,28 @@ export default function PortfolioPage() {
         <div className="text-sm text-[var(--text-muted)]">{t("portfolio.subtitle")}</div>
       </div>
 
-      {/* TOP ROW */}
+      {/* TOP ROW: selector + stats (alinhado na mesma grid 5 colunas) */}
       <section className="grid grid-cols-1 lg:grid-cols-5 gap-4 items-stretch">
+        {/* Selector (mesma largura da coluna esquerda do bloco abaixo) */}
         <div className="lg:col-span-3">
           <div className="h-full bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5">
             <div className="flex flex-col gap-3 h-full">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="text-sm font-semibold text-[var(--text-primary)]">{t("portfolio.db.title")}</div>
-                  <div className="mt-1 text-xs text-[var(--text-muted)]">{t("portfolio.db.hint")}</div>
+                  <div className="text-sm font-semibold text-[var(--text-primary)]">Carteiras (banco)</div>
+                  <div className="mt-1 text-xs text-[var(--text-muted)]">
+                    A lista atualiza ao abrir/voltar pra aba e ao salvar/criar/excluir.
+                  </div>
                 </div>
 
                 <div className="shrink-0 flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={newPortfolioLocal}
+                    onClick={newPortfolio}
                     className="h-10 rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] px-4 text-sm font-semibold
                               text-[var(--text-primary)] hover:bg-[var(--surface)]"
                   >
-                    {t("common.new")}
+                    Nova
                   </button>
 
                   <button
@@ -869,9 +887,9 @@ export default function PortfolioPage() {
                     className="h-10 rounded-xl border border-[color:var(--sell)]/40 bg-[var(--surface)] px-4 text-sm font-semibold
                               text-[color:var(--sell)] hover:bg-[color:var(--sell)]/10
                               disabled:opacity-60 disabled:cursor-not-allowed"
-                    title={selectedPortfolioId === "" ? (lang === "pt-BR" ? "Selecione uma carteira do banco" : "Select a DB portfolio") : t("common.delete")}
+                    title={selectedPortfolioId === "" ? "Selecione uma carteira do banco" : "Excluir carteira"}
                   >
-                    {t("common.delete")}
+                    Excluir
                   </button>
                 </div>
               </div>
@@ -889,39 +907,41 @@ export default function PortfolioPage() {
                             px-3 text-sm text-[var(--text-primary)] outline-none
                             disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  <option value="">{t("portfolio.db.unsavedNew")}</option>
-                  {dbPortfolios.map((p: DbPortfolio) => (
+                  <option value="">(Nova carteira — ainda não salva)</option>
+                  {/* SEM ID: mostra só o nome */}
+                  {dbPortfolios.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name}
                     </option>
                   ))}
                 </select>
 
-                {dbLoading ? <div className="mt-2 text-xs text-[var(--text-muted)]">{t("portfolio.db.updating")}</div> : null}
+                {dbLoading ? <div className="mt-2 text-xs text-[var(--text-muted)]">Atualizando lista…</div> : null}
               </div>
             </div>
           </div>
         </div>
 
+        {/* Stats (mesma coluna direita do bloco abaixo) e mesma altura do selector */}
         <div className="lg:col-span-2">
           <div className="h-full grid grid-cols-2 gap-4">
             <StatCard
               className="h-full flex flex-col justify-between"
-              title={lang === "pt-BR" ? "Total investido" : "Total invested"}
+              title="Total investido"
               value={fmtMoney(totals.totalValue)}
-              hint={lang === "pt-BR" ? "Somente posições (sem caixa)" : "Holdings only (no cash)"}
+              hint="Somente posições (sem caixa)"
             />
             <StatCard
               className="h-full flex flex-col justify-between"
-              title={lang === "pt-BR" ? "Ativos" : "Assets"}
+              title="Ativos"
               value={String(holdings.length)}
-              hint={lang === "pt-BR" ? "Linhas na carteira" : "Rows in portfolio"}
+              hint="Linhas na carteira"
             />
           </div>
         </div>
       </section>
 
-      {/* MAIN ROW */}
+      {/* MAIN ROW: editor + summary */}
       <section className="grid grid-cols-1 lg:grid-cols-5 gap-4">
         <div className="lg:col-span-3 bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
@@ -953,7 +973,7 @@ export default function PortfolioPage() {
                     : "A portfolio with this name already exists (name is the identifier). Change it to save."}
                 </div>
               ) : (
-                <div className="mt-2 text-xs text-[var(--text-muted)]">{t("portfolio.form.uniqueHint")}</div>
+                <div className="mt-2 text-xs text-[var(--text-muted)]">O nome é único e identifica a carteira no banco.</div>
               )}
             </div>
 
@@ -1212,12 +1232,8 @@ export default function PortfolioPage() {
                   <tr>
                     <td colSpan={7} className="p-6 text-center text-[var(--text-muted)]">
                       {data || manualPositions.length
-                        ? lang === "pt-BR"
-                          ? "Nenhuma posição nesse filtro."
-                          : "No positions in this filter."
-                        : lang === "pt-BR"
-                          ? "Sem dados ainda — importe, selecione do banco ou adicione manualmente."
-                          : "No data yet — import, pick from DB or add manually."}
+                        ? "Nenhuma posição nesse filtro."
+                        : "Sem dados ainda — importe, selecione do banco ou adicione manualmente."}
                     </td>
                   </tr>
                 ) : (
