@@ -1,7 +1,7 @@
 /* page.tsx */
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   importB3,
   type ImportResponse,
@@ -88,14 +88,17 @@ async function dbCreatePortfolio(name: string): Promise<{ id: number; name: stri
   return (await r.json()) as { id: number; name: string };
 }
 
-async function dbReplacePositions(portfolioId: number, positions: Array<{
-  ticker: string;
-  quantity: number;
-  price: number;
-  cls: ApiAssetClass;
-  note: number;
-  source: "manual" | "import";
-}>): Promise<void> {
+async function dbReplacePositions(
+  portfolioId: number,
+  positions: Array<{
+    ticker: string;
+    quantity: number;
+    price: number;
+    cls: ApiAssetClass;
+    note: number;
+    source: "manual" | "import";
+  }>,
+): Promise<void> {
   const r = await fetch(`${API_BASE}/api/db/portfolios/${portfolioId}/positions/replace`, {
     method: "POST",
     headers: { "content-type": "application/json", accept: "application/json" },
@@ -175,9 +178,9 @@ function Badge(props: { cls: AssetClass }) {
   );
 }
 
-function StatCard(props: { title: string; value: string; hint?: string }) {
+function StatCard(props: { title: string; value: string; hint?: string; className?: string }) {
   return (
-    <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-4">
+    <div className={["bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-4", props.className ?? ""].join(" ")}>
       <div className="text-xs text-[var(--text-muted)]">{props.title}</div>
       <div className="mt-1 text-lg font-semibold text-[var(--text-primary)]">{props.value}</div>
       {props.hint ? <div className="mt-1 text-xs text-[var(--text-muted)]">{props.hint}</div> : null}
@@ -238,6 +241,10 @@ function clampNote(v: number) {
 
 function toApiAssetClass(cls: AssetClass): ApiAssetClass {
   return cls;
+}
+
+function toAssetClass(v: unknown): AssetClass {
+  return v === "stocks" || v === "fiis" || v === "bonds" || v === "other" ? v : "other";
 }
 
 /* --------------------------------- page ----------------------------------- */
@@ -305,7 +312,7 @@ export default function PortfolioPage() {
     setRemovedTickers((prev) => prev.filter((x) => x !== tk));
   }
 
-  async function refreshDbPortfolios() {
+  const refreshDbPortfolios = useCallback(async () => {
     try {
       setDbLoading(true);
       const items = await dbListPortfolios();
@@ -316,13 +323,30 @@ export default function PortfolioPage() {
     } finally {
       setDbLoading(false);
     }
-  }
+  }, []);
 
-  // load portfolios list on mount
+  // (1) carrega ao abrir a página
   useEffect(() => {
     void refreshDbPortfolios();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [refreshDbPortfolios]);
+
+  // (2) recarrega ao voltar pra aba do browser / voltar foco na janela
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === "visible") void refreshDbPortfolios();
+    };
+    const onFocus = () => {
+      void refreshDbPortfolios();
+    };
+
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [refreshDbPortfolios]);
 
   // assets index (1 call)
   useEffect(() => {
@@ -366,13 +390,11 @@ export default function PortfolioPage() {
     try {
       setLoading(true);
 
-      // find name from list
       const p = dbPortfolios.find((x) => x.id === portfolioId);
       setPortfolioName(p?.name ?? `Carteira #${portfolioId}`);
 
       const rows = await dbGetPositions(portfolioId);
 
-      // convert db positions -> "import-like"
       const positions: Position[] = rows.map((r) => ({
         ticker: String(r.ticker ?? "").toUpperCase(),
         quantity: Number(r.quantity ?? 0),
@@ -380,7 +402,6 @@ export default function PortfolioPage() {
         asset_type: mapDbClsToAssetType(r.cls, r.ticker),
       }));
 
-      // put everything as "imported base" and keep manual empty
       setData({
         positions,
         prices: {},
@@ -413,7 +434,6 @@ export default function PortfolioPage() {
 
       setRemovedTickers([]);
 
-      // clear file state (DB is the base now)
       setFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
     } catch (e: unknown) {
@@ -447,7 +467,6 @@ export default function PortfolioPage() {
   }
 
   function clearEverythingLocalOnly() {
-    // "limpar carteira" = limpar edição atual (não apaga do DB)
     setData(null);
     setFile(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -585,11 +604,8 @@ export default function PortfolioPage() {
       const res = await importB3({ file, noTesouro: false });
       setData(res);
 
-      // ao importar arquivo, você está editando "estado local"
-      // não muda a carteira selecionada no DB automaticamente.
       setRemovedTickers([]);
 
-      // permitir re-selecionar o mesmo arquivo depois
       if (fileInputRef.current) fileInputRef.current.value = "";
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : typeof e === "string" ? e : "Falha ao importar arquivo.";
@@ -615,7 +631,8 @@ export default function PortfolioPage() {
     }
 
     const priceFromInput = manualPrice.trim() ? Number(manualPrice.replace(",", ".")) : undefined;
-    const priceCandidate = priceFromInput ?? picked.price ?? (data?.prices as any)?.[picked.ticker] ?? 0;
+    const prices = data?.prices as Record<string, number> | undefined;
+    const priceCandidate = priceFromInput ?? picked.price ?? prices?.[picked.ticker] ?? 0;
 
     if (!Number.isFinite(priceCandidate) || priceCandidate <= 0) {
       setError("Preço inválido. Digite um preço ou garanta que exista no BD.");
@@ -636,7 +653,12 @@ export default function PortfolioPage() {
       if (i === -1) return [...prev, pos];
 
       const copy = [...prev];
-      copy[i] = { ...copy[i], quantity: (copy[i].quantity ?? 0) + pos.quantity, price: pos.price, asset_type: pos.asset_type };
+      copy[i] = {
+        ...copy[i],
+        quantity: (copy[i].quantity ?? 0) + pos.quantity,
+        price: pos.price,
+        asset_type: pos.asset_type,
+      };
       return copy;
     });
 
@@ -661,7 +683,7 @@ export default function PortfolioPage() {
     setPicked({
       ticker,
       name: ticker,
-      asset_class: (meta?.cls as any) ?? "other",
+      asset_class: toAssetClass(meta?.cls),
       currency: "BRL",
       price: meta?.price ?? undefined,
     });
@@ -670,8 +692,8 @@ export default function PortfolioPage() {
 
     try {
       setPriceLoading(true);
-      const prices = await getRemotePrices([ticker]);
-      const px = (prices as any)[ticker];
+      const prices = (await getRemotePrices([ticker])) as Record<string, number>;
+      const px = prices[ticker];
       if (px != null && Number.isFinite(px)) {
         setManualPrice(String(px));
         setPicked((prev) => (prev ? { ...prev, price: px } : prev));
@@ -723,18 +745,15 @@ export default function PortfolioPage() {
     try {
       setSaveLoading(true);
 
-      // update existing
       if (selectedPortfolioId !== "") {
         await dbRenamePortfolio(selectedPortfolioId, name);
         await dbReplacePositions(selectedPortfolioId, positionsPayload);
+        await refreshDbPortfolios();
         setSaveMsg(`Atualizado! portfolio_id=${selectedPortfolioId}`);
       } else {
-        // create new
         const created = await dbCreatePortfolio(name);
         await dbReplacePositions(created.id, positionsPayload);
         setSelectedPortfolioId(created.id);
-
-        // refresh list and keep selection consistent
         await refreshDbPortfolios();
         setSaveMsg(`Criado! portfolio_id=${created.id}`);
       }
@@ -758,11 +777,7 @@ export default function PortfolioPage() {
     try {
       setSaveLoading(true);
       await dbDeletePortfolio(selectedPortfolioId);
-
-      // refresh list
       await refreshDbPortfolios();
-
-      // go back to "new portfolio"
       newPortfolio();
       setSaveMsg("Carteira excluída.");
     } catch (e: unknown) {
@@ -800,70 +815,92 @@ export default function PortfolioPage() {
         <div className="text-sm text-[var(--text-muted)]">Gerencie múltiplas carteiras e acompanhe alocação</div>
       </div>
 
-      {/* Portfolio selector row */}
-      <section className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5">
-        <div className="flex flex-col lg:flex-row lg:items-end gap-3">
-          <div className="flex-1">
-            <label className="block text-sm font-medium text-[var(--text-primary)]">Carteiras (banco)</label>
-            <div className="mt-2 flex flex-col sm:flex-row gap-2">
-              <select
-                value={selectedPortfolioId}
-                onChange={async (e) => {
-                  const v = e.target.value ? Number(e.target.value) : "";
-                  setSelectedPortfolioId(v);
-                  if (v !== "") await loadFromDb(v);
-                }}
-                className="w-full h-10 rounded-xl border border-[var(--border)] bg-[var(--surface-alt)]
-                           px-3 text-sm text-[var(--text-primary)] outline-none"
-              >
-                <option value="">(Nova carteira — ainda não salva)</option>
-                {dbPortfolios.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    #{p.id} — {p.name}
-                  </option>
-                ))}
-              </select>
+      {/* TOP ROW: selector + stats (alinhado na mesma grid 5 colunas) */}
+      <section className="grid grid-cols-1 lg:grid-cols-5 gap-4 items-stretch">
+        {/* Selector (mesma largura da coluna esquerda do bloco abaixo) */}
+        <div className="lg:col-span-3">
+          <div className="h-full bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5">
+            <div className="flex flex-col gap-3 h-full">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-[var(--text-primary)]">Carteiras (banco)</div>
+                  <div className="mt-1 text-xs text-[var(--text-muted)]">
+                    A lista atualiza ao abrir/voltar pra aba e ao salvar/criar/excluir.
+                  </div>
+                </div>
 
-              <button
-                type="button"
-                onClick={newPortfolio}
-                className="h-10 rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] px-4 text-sm font-semibold
-                           text-[var(--text-primary)] hover:bg-[var(--surface)]"
-              >
-                Nova
-              </button>
+                <div className="shrink-0 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={newPortfolio}
+                    className="h-10 rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] px-4 text-sm font-semibold
+                              text-[var(--text-primary)] hover:bg-[var(--surface)]"
+                  >
+                    Nova
+                  </button>
 
-              <button
-                type="button"
-                onClick={() => void refreshDbPortfolios()}
-                disabled={dbLoading}
-                className="h-10 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 text-sm
-                           text-[var(--text-primary)] hover:bg-[var(--surface-alt)]
-                           disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {dbLoading ? "Atualizando..." : "Atualizar lista"}
-              </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDeleteOpen(true)}
+                    disabled={saveLoading || selectedPortfolioId === ""}
+                    className="h-10 rounded-xl border border-[color:var(--sell)]/40 bg-[var(--surface)] px-4 text-sm font-semibold
+                              text-[color:var(--sell)] hover:bg-[color:var(--sell)]/10
+                              disabled:opacity-60 disabled:cursor-not-allowed"
+                    title={selectedPortfolioId === "" ? "Selecione uma carteira do banco" : "Excluir carteira"}
+                  >
+                    Excluir
+                  </button>
+                </div>
+              </div>
 
-              <button
-                type="button"
-                onClick={() => setConfirmDeleteOpen(true)}
-                disabled={saveLoading || selectedPortfolioId === ""}
-                className="h-10 rounded-xl border border-[color:var(--sell)]/40 bg-[var(--surface)] px-4 text-sm font-semibold
-                           text-[color:var(--sell)] hover:bg-[color:var(--sell)]/10
-                           disabled:opacity-60 disabled:cursor-not-allowed"
-                title={selectedPortfolioId === "" ? "Selecione uma carteira do banco" : "Excluir carteira"}
-              >
-                Excluir
-              </button>
+              <div className="flex-1 flex flex-col justify-end">
+                <select
+                  value={selectedPortfolioId}
+                  onChange={async (e) => {
+                    const v = e.target.value ? Number(e.target.value) : "";
+                    setSelectedPortfolioId(v);
+                    if (v !== "") await loadFromDb(v);
+                  }}
+                  disabled={dbLoading}
+                  className="w-full h-10 rounded-xl border border-[var(--border)] bg-[var(--surface-alt)]
+                            px-3 text-sm text-[var(--text-primary)] outline-none
+                            disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  <option value="">(Nova carteira — ainda não salva)</option>
+                  {/* SEM ID: mostra só o nome */}
+                  {dbPortfolios.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+
+                {dbLoading ? <div className="mt-2 text-xs text-[var(--text-muted)]">Atualizando lista…</div> : null}
+              </div>
             </div>
+          </div>
+        </div>
 
-            <div className="mt-2 text-xs text-[var(--text-muted)]">
-              Dica: selecione uma carteira para editar e salvar. “Nova” cria uma carteira nova (nome precisa ser único).
-            </div>
+        {/* Stats (mesma coluna direita do bloco abaixo) e mesma altura do selector */}
+        <div className="lg:col-span-2">
+          <div className="h-full grid grid-cols-2 gap-4">
+            <StatCard
+              className="h-full flex flex-col justify-between"
+              title="Total investido"
+              value={fmtMoney(totals.totalValue)}
+              hint="Somente posições (sem caixa)"
+            />
+            <StatCard
+              className="h-full flex flex-col justify-between"
+              title="Ativos"
+              value={String(holdings.length)}
+              hint="Linhas na carteira"
+            />
           </div>
         </div>
       </section>
 
+      {/* MAIN ROW: editor + summary */}
       <section className="grid grid-cols-1 lg:grid-cols-5 gap-4">
         <div className="lg:col-span-3 bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
@@ -893,9 +930,7 @@ export default function PortfolioPage() {
                   Já existe uma carteira com esse nome (o nome é o identificador). Troque para salvar.
                 </div>
               ) : (
-                <div className="mt-2 text-xs text-[var(--text-muted)]">
-                  O nome é único e identifica a carteira no banco.
-                </div>
+                <div className="mt-2 text-xs text-[var(--text-muted)]">O nome é único e identifica a carteira no banco.</div>
               )}
             </div>
 
@@ -1042,11 +1077,6 @@ export default function PortfolioPage() {
 
         {/* Right summary */}
         <div className="lg:col-span-2 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <StatCard title="Total investido" value={fmtMoney(totals.totalValue)} hint="Somente posições (sem caixa)" />
-            <StatCard title="Ativos" value={String(holdings.length)} hint="Linhas na carteira" />
-          </div>
-
           <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5 space-y-3">
             <div className="flex items-center justify-between">
               <div className="text-sm font-semibold text-[var(--text-primary)]">Alocação atual</div>
@@ -1145,7 +1175,9 @@ export default function PortfolioPage() {
                 {filtered.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="p-6 text-center text-[var(--text-muted)]">
-                      {data || manualPositions.length ? "Nenhuma posição nesse filtro." : "Sem dados ainda — importe, selecione do banco ou adicione manualmente."}
+                      {data || manualPositions.length
+                        ? "Nenhuma posição nesse filtro."
+                        : "Sem dados ainda — importe, selecione do banco ou adicione manualmente."}
                     </td>
                   </tr>
                 ) : (
