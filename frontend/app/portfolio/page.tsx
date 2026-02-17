@@ -1,6 +1,9 @@
 /* page.tsx */
 "use client";
 
+import { Plus, Trash2, Upload, Save, BarChart3, Wallet, Database, Minus, UploadCloud } from "lucide-react";
+
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   importB3,
@@ -184,11 +187,11 @@ function Badge(props: { cls: AssetClass; label: string }) {
   );
 }
 
-function StatCard(props: { title: string; value: string; hint?: string; className?: string }) {
+function StatCard(props: { title: React.ReactNode; value: string; hint?: string; className?: string }) {
   return (
     <div className={["bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-4", props.className ?? ""].join(" ")}>
       <div className="text-xs text-[var(--text-muted)]">{props.title}</div>
-      <div className="mt-1 text-lg font-semibold text-[var(--text-primary)]">{props.value}</div>
+      <div className="mt-1 text-2xl font-semibold tracking-tight text-[var(--text-primary)]">{props.value}</div>
       {props.hint ? <div className="mt-1 text-xs text-[var(--text-muted)]">{props.hint}</div> : null}
     </div>
   );
@@ -252,6 +255,7 @@ export default function PortfolioPage() {
     (n: number) => new Intl.NumberFormat(lang, { maximumFractionDigits: 1 }).format(n) + "%",
     [lang],
   );
+  const [addTab, setAddTab] = useState<"import" | "manual">("import");
 
   const [file, setFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -755,13 +759,13 @@ export default function PortfolioPage() {
         await dbRenamePortfolio(selectedPortfolioId, name);
         await dbReplacePositions(selectedPortfolioId, positionsPayload);
         await refreshDbPortfolios();
-        setSaveMsg(`Updated! portfolio_id=${selectedPortfolioId}`);
+        // setSaveMsg(`Updated! portfolio_id=${selectedPortfolioId}`);
       } else {
         const created = await dbCreatePortfolio(name);
         await dbReplacePositions(created.id, positionsPayload);
         setSelectedPortfolioId(created.id);
         await refreshDbPortfolios();
-        setSaveMsg(`Created! portfolio_id=${created.id}`);
+        // setSaveMsg(`Created! portfolio_id=${created.id}`);
       }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : (lang === "pt-BR" ? "Falha ao salvar no banco." : "Failed to save to DB.");
@@ -837,8 +841,12 @@ export default function PortfolioPage() {
       />
 
       <div className="flex items-baseline justify-between">
-        <h1 className="text-2xl font-semibold text-[var(--text-primary)]">{t("portfolio.title")}</h1>
-        <div className="text-sm text-[var(--text-muted)]">{t("portfolio.subtitle")}</div>
+        <h1 className="text-2xl font-semibold text-[var(--text-primary)] flex items-center gap-2">
+          <Wallet size={22} />
+          {t("portfolio.title")}
+        </h1>
+
+        {/* <div className="text-sm text-[var(--text-muted)]">{t("portfolio.subtitle")}</div> */}
       </div>
 
       {/* TOP ROW */}
@@ -848,31 +856,45 @@ export default function PortfolioPage() {
             <div className="flex flex-col gap-3 h-full">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="text-sm font-semibold text-[var(--text-primary)]">{t("portfolio.db.title")}</div>
-                  <div className="mt-1 text-xs text-[var(--text-muted)]">{t("portfolio.db.hint")}</div>
+                  <div className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-2">
+                    <Database size={16} />
+                    {t("portfolio.db.title")}
+                  </div>
+                  {/* <div className="mt-1 text-xs text-[var(--text-muted)]">{t("portfolio.db.hint")}</div> */}
                 </div>
 
                 <div className="shrink-0 flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={newPortfolioLocal}
-                    className="h-10 rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] px-4 text-sm font-semibold
-                              text-[var(--text-primary)] hover:bg-[var(--surface)]"
-                  >
-                    {t("common.new")}
-                  </button>
+                <button
+                  type="button"
+                  onClick={newPortfolioLocal}
+                  className="h-10 inline-flex items-center justify-center gap-2 rounded-xl
+                            border border-[var(--border)] bg-[var(--surface-alt)] px-4 text-sm font-semibold
+                            text-[var(--text-primary)] hover:bg-[var(--surface)]"
+                >
+                  <Plus className="h-4 w-4 shrink-0" />
+                  {t("common.new")}
+                </button>
 
-                  <button
-                    type="button"
-                    onClick={() => setConfirmDeleteOpen(true)}
-                    disabled={saveLoading || selectedPortfolioId === ""}
-                    className="h-10 rounded-xl border border-[color:var(--sell)]/40 bg-[var(--surface)] px-4 text-sm font-semibold
-                              text-[color:var(--sell)] hover:bg-[color:var(--sell)]/10
-                              disabled:opacity-60 disabled:cursor-not-allowed"
-                    title={selectedPortfolioId === "" ? (lang === "pt-BR" ? "Selecione uma carteira do banco" : "Select a DB portfolio") : t("common.delete")}
-                  >
-                    {t("common.delete")}
-                  </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmDeleteOpen(true)}
+                  disabled={saveLoading || selectedPortfolioId === ""}
+                  className="h-10 inline-flex items-center justify-center gap-2 rounded-xl
+                            border border-[color:var(--sell)]/40 bg-[var(--surface)] px-4 text-sm font-semibold
+                            text-[color:var(--sell)] hover:bg-[color:var(--sell)]/10
+                            disabled:opacity-60 disabled:cursor-not-allowed"
+                  title={
+                    selectedPortfolioId === ""
+                      ? lang === "pt-BR"
+                        ? "Selecione uma carteira do banco"
+                        : "Select a DB portfolio"
+                      : t("common.delete")
+                  }
+                >
+                  <Trash2 className="h-4 w-4 shrink-0" />
+                  {t("common.delete")}
+                </button>
+
                 </div>
               </div>
 
@@ -907,15 +929,25 @@ export default function PortfolioPage() {
           <div className="h-full grid grid-cols-2 gap-4">
             <StatCard
               className="h-full flex flex-col justify-between"
-              title={lang === "pt-BR" ? "Total investido" : "Total invested"}
+              title={
+                <span className="flex items-center gap-2">
+                <BarChart3 size={16} />
+                {lang === "pt-BR" ? "Total investido" : "Total invested"}
+                </span>
+              }
               value={fmtMoney(totals.totalValue)}
-              hint={lang === "pt-BR" ? "Somente posições (sem caixa)" : "Holdings only (no cash)"}
+              // hint={lang === "pt-BR" ? "Somente posições (sem caixa)" : "Holdings only (no cash)"}
             />
             <StatCard
               className="h-full flex flex-col justify-between"
-              title={lang === "pt-BR" ? "Ativos" : "Assets"}
+                title={
+                  <span className="flex items-center gap-2">
+                    <Wallet size={16} />
+                    {lang === "pt-BR" ? "Ativos" : "Assets"}
+                  </span>
+                }
               value={String(holdings.length)}
-              hint={lang === "pt-BR" ? "Linhas na carteira" : "Rows in portfolio"}
+              // hint={lang === "pt-BR" ? "Linhas na carteira" : "Rows in portfolio"}
             />
           </div>
         </div>
@@ -960,52 +992,96 @@ export default function PortfolioPage() {
             <div className="hidden md:block md:col-span-3" />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Import card */}
-            <div className="bg-[var(--surface-alt)] border border-[var(--border)] rounded-2xl p-4 space-y-3">
-              <div className="text-sm font-semibold text-[var(--text-primary)]">{t("portfolio.importCard.title")}</div>
+          <div className="bg-[var(--surface-alt)] border border-[var(--border)] rounded-2xl p-4 space-y-4">
+            {/* Header + Tabs */}
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-2">
+                <Plus size={16} />
+                {lang === "pt-BR" ? "Adicionar ativos" : "Add assets"}
+              </div>
 
-              <div className="space-y-2">
-                <label className="block text-xs text-[var(--text-muted)]">{t("portfolio.importCard.fileLabel")}</label>
+              <div className="inline-flex rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1">
+                <button
+                  type="button"
+                  onClick={() => setAddTab("import")}
+                  className={[
+                    "px-3 py-1.5 rounded-lg text-xs font-semibold transition",
+                    addTab === "import"
+                      ? "bg-[var(--surface-alt)] text-[var(--text-primary)]"
+                      : "text-[var(--text-muted)] hover:text-[var(--text-primary)]",
+                  ].join(" ")}
+                >
+                  {lang === "pt-BR" ? "Importar XLSX" : "Import XLSX"}
+                </button>
 
-                <div className="flex items-center gap-2 flex-wrap">
-                  <label
-                    className="max-w-full inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)]
-                              px-3 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--surface-alt)] cursor-pointer"
-                  >
-                    <span className="font-medium shrink-0">{t("common.select")}</span>
-
-                    <span className="min-w-0 flex-1 text-[var(--text-muted)] truncate">
-                      {file ? file.name : data?.meta?.filename ?? t("portfolio.importCard.noneFile")}
-                    </span>
-
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept=".xlsx"
-                      className="hidden"
-                      onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                    />
-                  </label>
-
-                  <button
-                    onClick={onImport}
-                    disabled={loading}
-                    className="rounded-xl bg-[var(--primary)] text-[var(--on-primary)] px-4 py-2 text-sm font-semibold
-                               hover:bg-[var(--primary-hover)] disabled:opacity-60 disabled:cursor-not-allowed"
-                  >
-                    {loading ? t("portfolio.importCard.importing") : t("portfolio.importCard.importBtn")}
-                  </button>
-                </div>
-
-                <div className="text-xs text-[var(--text-muted)]">{t("portfolio.importCard.hint")}</div>
+                <button
+                  type="button"
+                  onClick={() => setAddTab("manual")}
+                  className={[
+                    "px-3 py-1.5 rounded-lg text-xs font-semibold transition",
+                    addTab === "manual"
+                      ? "bg-[var(--surface-alt)] text-[var(--text-primary)]"
+                      : "text-[var(--text-muted)] hover:text-[var(--text-primary)]",
+                  ].join(" ")}
+                >
+                  {lang === "pt-BR" ? "Manual" : "Manual"}
+                </button>
               </div>
             </div>
 
-            {/* Manual card */}
-            <div className="bg-[var(--surface-alt)] border border-[var(--border)] rounded-2xl p-4 space-y-3">
-              <div className="text-sm font-semibold text-[var(--text-primary)]">{t("portfolio.manualCard.title")}</div>
+            {/* TAB: IMPORT */}
+            {addTab === "import" ? (
+              <div className="space-y-3">
+                <div className="text-xs text-[var(--text-muted)]">{t("portfolio.importCard.fileLabel")}</div>
 
+                {/* Dropzone look */}
+                <label className="block cursor-pointer rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface)] p-4 hover:bg-[var(--surface-alt)]">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] p-2">
+                      <UploadCloud className="h-5 w-5 text-[var(--text-muted)]" />
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-semibold text-[var(--text-primary)]">
+                        {lang === "pt-BR" ? "Clique para selecionar o XLSX" : "Click to pick the XLSX"}
+                      </div>
+
+                      <div className="mt-1 text-xs text-[var(--text-muted)] truncate">
+                        {file ? file.name : data?.meta?.filename ?? t("portfolio.importCard.noneFile")}
+                      </div>
+
+                      <div className="mt-2 text-[11px] text-[var(--text-muted)]">
+                        {lang === "pt-BR" ? "Dica: arraste e solte aqui também." : "Tip: you can drag & drop here too."}
+                      </div>
+                    </div>
+                  </div>
+
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".xlsx"
+                    className="hidden"
+                    onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                  />
+                </label>
+
+                <button
+                  onClick={onImport}
+                  disabled={loading}
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-xl
+                            bg-[var(--primary)] text-[var(--on-primary)]
+                            px-4 py-2.5 text-sm font-semibold
+                            hover:bg-[var(--primary-hover)]
+                            disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  <Upload className="h-4 w-4 shrink-0" />
+                  {loading ? t("portfolio.importCard.importing") : t("portfolio.importCard.importBtn")}
+                </button>
+              </div>
+            ) : null}
+
+            {/* TAB: MANUAL */}
+            {addTab === "manual" ? (
               <div className="grid grid-cols-1 gap-3">
                 <div className="relative">
                   <label className="block text-xs text-[var(--text-muted)] mb-1">{t("portfolio.manualCard.asset")}</label>
@@ -1022,25 +1098,12 @@ export default function PortfolioPage() {
                       onBlur={handleBlur}
                       placeholder={lang === "pt-BR" ? "Digite ticker (ex.: HGLG11, VALE3...)" : "Type ticker (e.g., HGLG11, VALE3...)"}
                       className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 pr-10 text-sm
-                                 text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-[var(--primary)]/30"
+                                text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-[var(--primary)]/30"
                     />
 
                     <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
                       {sugLoading || priceLoading || assetIndexLoading ? (
                         <span
-                          title={
-                            assetIndexLoading
-                              ? lang === "pt-BR"
-                                ? "Carregando ativos..."
-                                : "Loading assets..."
-                              : priceLoading
-                                ? lang === "pt-BR"
-                                  ? "Buscando preço..."
-                                  : "Fetching price..."
-                                : lang === "pt-BR"
-                                  ? "Buscando sugestões..."
-                                  : "Searching..."
-                          }
                           className="h-2 w-2 rounded-full bg-[var(--text-muted)]/60 group-hover:bg-[var(--text-primary)]/60"
                         />
                       ) : null}
@@ -1073,7 +1136,7 @@ export default function PortfolioPage() {
                       placeholder={lang === "pt-BR" ? "ex.: 10" : "e.g. 10"}
                       inputMode="decimal"
                       className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm
-                                 text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-[var(--primary)]/30"
+                                text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-[var(--primary)]/30"
                     />
                   </div>
 
@@ -1082,27 +1145,29 @@ export default function PortfolioPage() {
                     <input
                       value={manualPrice}
                       onChange={(e) => setManualPrice(e.target.value)}
-                      placeholder={lang === "pt-BR" ? "usa BD/Prices se vazio" : "uses DB/Prices if empty"}
+                      // placeholder={lang === "pt-BR" ? "usa BD/Prices se vazio" : "uses DB/Prices if empty"}
                       inputMode="decimal"
                       className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm
-                                 text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-[var(--primary)]/30"
+                                text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-[var(--primary)]/30"
                     />
                   </div>
                 </div>
 
-                <div className="flex items-center justify-end">
-                  <button
-                    type="button"
-                    onClick={addManual}
-                    className="rounded-xl bg-[var(--primary)] text-[var(--on-primary)] px-4 py-2 text-sm font-semibold
-                               hover:bg-[var(--primary-hover)]"
-                  >
-                    {t("common.add")}
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={addManual}
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-xl
+                            bg-[var(--primary)] text-[var(--on-primary)]
+                            px-4 py-2.5 text-sm font-semibold
+                            hover:bg-[var(--primary-hover)]"
+                >
+                  <Plus className="h-4 w-4 shrink-0" />
+                  {t("common.add")}
+                </button>
               </div>
-            </div>
+            ) : null}
           </div>
+
 
           {error ? <div className="text-sm text-[color:var(--sell)]">{error}</div> : null}
           {saveMsg ? <div className="text-sm text-[var(--text-muted)]">{saveMsg}</div> : null}
@@ -1155,11 +1220,20 @@ export default function PortfolioPage() {
             type="button"
             onClick={onSaveToDb}
             disabled={saveLoading || nameTakenByOther}
-            className="w-full rounded-2xl bg-[var(--primary)] text-[var(--on-primary)] px-4 py-3 text-sm font-semibold
-                       hover:bg-[var(--primary-hover)] disabled:opacity-60 disabled:cursor-not-allowed"
+            className="w-full inline-flex items-center justify-center gap-2 rounded-2xl
+                      bg-[var(--primary)] text-[var(--on-primary)]
+                      px-4 py-3 text-sm font-semibold
+                      hover:bg-[var(--primary-hover)]
+                      disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            {saveLoading ? t("portfolio.save.saving") : selectedPortfolioId === "" ? t("portfolio.save.create") : t("portfolio.save.update")}
+            <Save className="h-5 w-5 shrink-0" />
+            {saveLoading
+              ? t("portfolio.save.saving")
+              : selectedPortfolioId === ""
+                ? t("portfolio.save.create")
+                : t("portfolio.save.update")}
           </button>
+
         </div>
       </section>
 
@@ -1167,10 +1241,13 @@ export default function PortfolioPage() {
       <section className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5 space-y-4">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="space-y-1">
-            <div className="text-lg font-semibold text-[var(--text-primary)]">{t("portfolio.holdings.title")}</div>
+            <div className="text-lg font-semibold text-[var(--text-primary)] flex items-center gap-2">
+              <BarChart3 size={18} />
+              {t("portfolio.holdings.title")}
+            </div>
             <div className="text-sm text-[var(--text-muted)]">
-              {(data?.meta?.filename ? t("portfolio.holdings.baseWith", { filename: data.meta.filename }) : t("portfolio.holdings.baseNone"))} •{" "}
-              {t("portfolio.holdings.items", { count: holdings.length })}
+              {/* {(data?.meta?.filename ? t("portfolio.holdings.baseWith", { filename: data.meta.filename }) : t("portfolio.holdings.baseNone"))} •{" "} */}
+              {/* {t("portfolio.holdings.items", { count: holdings.length })} */}
             </div>
           </div>
 
@@ -1244,12 +1321,12 @@ export default function PortfolioPage() {
                             <button
                               type="button"
                               onClick={() => setNotesByTicker((prev) => ({ ...prev, [tk]: clampNote((prev[tk] ?? 10) - 1) }))}
-                              className="h-8 w-8 rounded-lg border border-[var(--border)] bg-[var(--surface)]
+                              className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)]
                                          text-[var(--text-primary)] hover:bg-[var(--surface-alt)]"
                               aria-label={lang === "pt-BR" ? "Diminuir nota" : "Decrease note"}
                               title={lang === "pt-BR" ? "Diminuir" : "Decrease"}
                             >
-                              −
+                              <Minus size={14} />
                             </button>
 
                             <input
@@ -1267,12 +1344,12 @@ export default function PortfolioPage() {
                             <button
                               type="button"
                               onClick={() => setNotesByTicker((prev) => ({ ...prev, [tk]: clampNote((prev[tk] ?? 10) + 1) }))}
-                              className="h-8 w-8 rounded-lg border border-[var(--border)] bg-[var(--surface)]
+                              className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)]
                                          text-[var(--text-primary)] hover:bg-[var(--surface-alt)]"
                               aria-label={lang === "pt-BR" ? "Aumentar nota" : "Increase note"}
                               title={lang === "pt-BR" ? "Aumentar" : "Increase"}
                             >
-                              +
+                              <Plus size={14} />
                             </button>
                           </div>
                         </td>
@@ -1285,7 +1362,7 @@ export default function PortfolioPage() {
                             className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)]
                                        text-[var(--text-muted)] hover:text-[color:var(--sell)] hover:border-[color:var(--sell)]/40 hover:bg-[var(--surface-alt)]"
                           >
-                            ×
+                            <Trash2 size={16} />
                           </button>
                         </td>
                       </tr>
