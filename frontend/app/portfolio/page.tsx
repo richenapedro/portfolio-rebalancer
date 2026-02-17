@@ -11,6 +11,7 @@ import {
   type RemoteAsset,
   type ApiAssetClass,
 } from "@/lib/api";
+import { useI18n } from "@/i18n/I18nProvider";
 
 type AssetClass = "stocks" | "fiis" | "bonds" | "other";
 type Position = ImportResponse["positions"][number];
@@ -153,27 +154,32 @@ function mapDbClsToAssetType(cls?: string | null, ticker?: string | null): Posit
   return "STOCK";
 }
 
-function fmtMoney(n: number) {
-  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n);
-}
-function fmtQty(n: number) {
-  return new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 8 }).format(n);
-}
-function fmtPct(n: number) {
-  return new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }).format(n) + "%";
+function clampNote(v: number) {
+  if (!Number.isFinite(v)) return 10;
+  if (v < 0) return 0;
+  if (v > 10) return 10;
+  return Math.round(v);
 }
 
-function Badge(props: { cls: AssetClass }) {
-  const map: Record<AssetClass, { label: string; classes: string }> = {
-    stocks: { label: "Ações", classes: "bg-[color:var(--sell)]/15 text-[color:var(--sell)] border-[color:var(--sell)]/30" },
-    fiis: { label: "FIIs", classes: "bg-[color:var(--buy)]/15 text-[color:var(--buy)] border-[color:var(--buy)]/30" },
-    bonds: { label: "RF", classes: "bg-[var(--surface-alt)] text-[var(--text-muted)] border-[var(--border)]" },
-    other: { label: "Outro", classes: "bg-[var(--surface-alt)] text-[var(--text-muted)] border-[var(--border)]" },
+function toApiAssetClass(cls: AssetClass): ApiAssetClass {
+  return cls;
+}
+
+function toAssetClass(v: unknown): AssetClass {
+  return v === "stocks" || v === "fiis" || v === "bonds" || v === "other" ? v : "other";
+}
+
+function Badge(props: { cls: AssetClass; label: string }) {
+  const map: Record<AssetClass, { classes: string }> = {
+    stocks: { classes: "bg-[color:var(--sell)]/15 text-[color:var(--sell)] border-[color:var(--sell)]/30" },
+    fiis: { classes: "bg-[color:var(--buy)]/15 text-[color:var(--buy)] border-[color:var(--buy)]/30" },
+    bonds: { classes: "bg-[var(--surface-alt)] text-[var(--text-muted)] border-[var(--border)]" },
+    other: { classes: "bg-[var(--surface-alt)] text-[var(--text-muted)] border-[var(--border)]" },
   };
   const s = map[props.cls];
   return (
     <span className={["inline-flex items-center px-2 py-0.5 rounded-full text-xs border", s.classes].join(" ")}>
-      {s.label}
+      {props.label}
     </span>
   );
 }
@@ -212,7 +218,7 @@ function ConfirmModal(props: {
                 className="rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-2 text-sm font-semibold
                            text-[var(--text-primary)] hover:bg-[var(--surface)]"
               >
-                {props.cancelText ?? "Cancelar"}
+                {props.cancelText ?? "Cancel"}
               </button>
               <button
                 onClick={() => {
@@ -222,7 +228,7 @@ function ConfirmModal(props: {
                 className="rounded-xl bg-[var(--primary)] text-[var(--on-primary)] px-4 py-2 text-sm font-semibold
                            hover:bg-[var(--primary-hover)]"
               >
-                {props.confirmText ?? "Confirmar"}
+                {props.confirmText ?? "Confirm"}
               </button>
             </div>
           </div>
@@ -250,6 +256,18 @@ function toAssetClass(v: unknown): AssetClass {
 /* --------------------------------- page ----------------------------------- */
 
 export default function PortfolioPage() {
+  const { lang, t } = useI18n();
+
+  const fmtMoney = useCallback(
+    (n: number) => new Intl.NumberFormat(lang, { style: "currency", currency: "BRL" }).format(n),
+    [lang],
+  );
+  const fmtQty = useCallback((n: number) => new Intl.NumberFormat(lang, { maximumFractionDigits: 8 }).format(n), [lang]);
+  const fmtPct = useCallback(
+    (n: number) => new Intl.NumberFormat(lang, { maximumFractionDigits: 1 }).format(n) + "%",
+    [lang],
+  );
+
   const [file, setFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -301,7 +319,7 @@ export default function PortfolioPage() {
     return m;
   }, [assetIndex]);
 
-  const removedSet = useMemo(() => new Set(removedTickers.map((t) => t.toUpperCase())), [removedTickers]);
+  const removedSet = useMemo(() => new Set(removedTickers.map((tk) => tk.toUpperCase())), [removedTickers]);
 
   function removeTicker(ticker: string) {
     const tk = ticker.trim().toUpperCase();
@@ -358,7 +376,7 @@ export default function PortfolioPage() {
         if (!alive) return;
         setAssetIndex(res.items);
       } catch (e) {
-        console.error("Falha ao carregar assets index:", e);
+        console.error("Failed to load assets index:", e);
         if (!alive) return;
         setAssetIndex(null);
       } finally {
@@ -375,7 +393,7 @@ export default function PortfolioPage() {
     const name = portfolioName.trim().toLowerCase();
     if (!name) return false;
 
-    const found = dbPortfolios.find((p) => p.name.trim().toLowerCase() === name);
+    const found = dbPortfolios.find((p: DbPortfolio) => p.name.trim().toLowerCase() === name);
     if (!found) return false;
 
     if (selectedPortfolioId === "") return true; // creating a new one -> taken
@@ -444,9 +462,12 @@ export default function PortfolioPage() {
     }
   }
 
-  function newPortfolio() {
+  function newPortfolioLocal() {
     setSelectedPortfolioId("");
-    setPortfolioName("Minha carteira");
+    setPortfolioName(t("portfolio.db.unsavedNew")); // texto visível? -> vamos usar placeholder default abaixo
+
+    // melhor: default do campo (não a label)
+    setPortfolioName(lang === "pt-BR" ? "Minha carteira" : "My portfolio");
 
     setData(null);
     setFile(null);
@@ -490,7 +511,7 @@ export default function PortfolioPage() {
     const query = q.trim().toUpperCase();
     if (picked && q.includes("—")) return;
 
-    const t = window.setTimeout(async () => {
+    const timer = window.setTimeout(async () => {
       try {
         setSugLoading(true);
 
@@ -524,18 +545,18 @@ export default function PortfolioPage() {
       }
     }, 80);
 
-    return () => window.clearTimeout(t);
+    return () => window.clearTimeout(timer);
   }, [q, picked, assetIndex]);
 
   // positions = base(import/db) + manual, removendo tickers deletados
   const allPositions: Position[] = useMemo(() => {
     const merged = [...(data?.positions ?? []), ...manualPositions];
-    return merged.filter((p) => !removedSet.has((p.ticker ?? "").toUpperCase()));
+    return merged.filter((p: Position) => !removedSet.has((p.ticker ?? "").toUpperCase()));
   }, [data?.positions, manualPositions, removedSet]);
 
   const holdings: Holding[] = useMemo(() => {
     return allPositions
-      .map((p) => {
+      .map((p: Position) => {
         const value = (p.quantity ?? 0) * (p.price ?? 0);
         const cls = mapAssetTypeToClass(p.asset_type);
 
@@ -544,7 +565,7 @@ export default function PortfolioPage() {
 
         return { ...p, value, cls, note };
       })
-      .sort((a, b) => b.value - a.value);
+      .sort((a: Holding, b: Holding) => b.value - a.value);
   }, [allPositions, notesByTicker]);
 
   const totals = useMemo(() => {
@@ -595,7 +616,7 @@ export default function PortfolioPage() {
     setSaveMsg(null);
 
     if (!file) {
-      setError("Selecione um arquivo B3 (XLSX) para importar.");
+      setError(lang === "pt-BR" ? "Selecione um arquivo B3 (XLSX) para importar." : "Select a B3 XLSX file to import.");
       return;
     }
 
@@ -608,7 +629,7 @@ export default function PortfolioPage() {
 
       if (fileInputRef.current) fileInputRef.current.value = "";
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : typeof e === "string" ? e : "Falha ao importar arquivo.";
+      const msg = e instanceof Error ? e.message : typeof e === "string" ? e : (lang === "pt-BR" ? "Falha ao importar arquivo." : "Failed to import file.");
       setError(msg);
     } finally {
       setLoading(false);
@@ -620,13 +641,13 @@ export default function PortfolioPage() {
     setSaveMsg(null);
 
     if (!picked) {
-      setError("Selecione um ativo válido na lista.");
+      setError(lang === "pt-BR" ? "Selecione um ativo válido na lista." : "Pick a valid asset from the list.");
       return;
     }
 
     const qn = Number(String(qty).replace(",", "."));
     if (!Number.isFinite(qn) || qn <= 0) {
-      setError("Quantidade inválida.");
+      setError(lang === "pt-BR" ? "Quantidade inválida." : "Invalid quantity.");
       return;
     }
 
@@ -635,7 +656,7 @@ export default function PortfolioPage() {
     const priceCandidate = priceFromInput ?? picked.price ?? prices?.[picked.ticker] ?? 0;
 
     if (!Number.isFinite(priceCandidate) || priceCandidate <= 0) {
-      setError("Preço inválido. Digite um preço ou garanta que exista no BD.");
+      setError(lang === "pt-BR" ? "Preço inválido. Digite um preço ou garanta que exista no BD." : "Invalid price. Enter a price or ensure it exists in the DB.");
       return;
     }
 
@@ -699,7 +720,7 @@ export default function PortfolioPage() {
         setPicked((prev) => (prev ? { ...prev, price: px } : prev));
       }
     } catch (e) {
-      console.error("Erro ao buscar preço:", e);
+      console.error("Failed to fetch price:", e);
     } finally {
       setPriceLoading(false);
     }
@@ -719,15 +740,15 @@ export default function PortfolioPage() {
 
     const name = portfolioName.trim();
     if (!name) {
-      setError("Digite um nome para a carteira.");
+      setError(lang === "pt-BR" ? "Digite um nome para a carteira." : "Enter a portfolio name.");
       return;
     }
     if (nameTakenByOther) {
-      setError("Já existe uma carteira com esse nome. Escolha outro nome.");
+      setError(lang === "pt-BR" ? "Já existe uma carteira com esse nome. Escolha outro nome." : "A portfolio with this name already exists. Choose another name.");
       return;
     }
     if (holdings.length === 0) {
-      setError("Nada para salvar: a carteira está vazia.");
+      setError(lang === "pt-BR" ? "Nada para salvar: a carteira está vazia." : "Nothing to save: the portfolio is empty.");
       return;
     }
 
@@ -755,10 +776,10 @@ export default function PortfolioPage() {
         await dbReplacePositions(created.id, positionsPayload);
         setSelectedPortfolioId(created.id);
         await refreshDbPortfolios();
-        setSaveMsg(`Criado! portfolio_id=${created.id}`);
+        setSaveMsg(`Created! portfolio_id=${created.id}`);
       }
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Falha ao salvar no banco.";
+      const msg = e instanceof Error ? e.message : (lang === "pt-BR" ? "Falha ao salvar no banco." : "Failed to save to DB.");
       setError(msg);
     } finally {
       setSaveLoading(false);
@@ -770,7 +791,7 @@ export default function PortfolioPage() {
     setSaveMsg(null);
 
     if (selectedPortfolioId === "") {
-      setError("Selecione uma carteira do banco para excluir.");
+      setError(lang === "pt-BR" ? "Selecione uma carteira do banco para excluir." : "Select a portfolio from the DB to delete.");
       return;
     }
 
@@ -788,31 +809,51 @@ export default function PortfolioPage() {
     }
   }
 
+  const labelStocks = t("portfolio.allocation.stocks");
+  const labelFiis = t("portfolio.allocation.fiis");
+  const labelBonds = t("portfolio.allocation.bonds");
+  const labelOther = t("portfolio.allocation.other");
+
+  const tabLabel = (k: "all" | AssetClass) => {
+    if (k === "all") return t("portfolio.holdings.tabs.all");
+    if (k === "stocks") return t("portfolio.holdings.tabs.stocks");
+    if (k === "fiis") return t("portfolio.holdings.tabs.fiis");
+    if (k === "bonds") return t("portfolio.holdings.tabs.bonds");
+    return t("portfolio.holdings.tabs.other");
+  };
+
+  const badgeLabel = (cls: AssetClass) => {
+    if (cls === "stocks") return labelStocks;
+    if (cls === "fiis") return labelFiis;
+    if (cls === "bonds") return labelBonds;
+    return labelOther;
+  };
+
   return (
     <main className="space-y-6">
       <ConfirmModal
         open={confirmClearOpen}
-        title="Tem certeza que deseja limpar a carteira?"
-        description="Isso limpa a edição atual (tela). Não exclui a carteira do banco."
-        confirmText="Limpar"
-        cancelText="Cancelar"
+        title={t("portfolio.confirm.clearTitle")}
+        description={t("portfolio.confirm.clearDesc")}
+        confirmText={t("common.clear")}
+        cancelText={t("common.cancel")}
         onConfirm={clearEverythingLocalOnly}
         onClose={() => setConfirmClearOpen(false)}
       />
 
       <ConfirmModal
         open={confirmDeleteOpen}
-        title="Excluir carteira do banco?"
-        description="Essa ação remove a carteira e todas as posições/import_runs no banco. Não pode ser desfeita."
-        confirmText="Excluir"
-        cancelText="Cancelar"
+        title={t("portfolio.confirm.deleteTitle")}
+        description={t("portfolio.confirm.deleteDesc")}
+        confirmText={t("common.delete")}
+        cancelText={t("common.cancel")}
         onConfirm={onDeleteSelectedPortfolio}
         onClose={() => setConfirmDeleteOpen(false)}
       />
 
       <div className="flex items-baseline justify-between">
-        <h1 className="text-2xl font-semibold text-[var(--text-primary)]">Carteira</h1>
-        <div className="text-sm text-[var(--text-muted)]">Gerencie múltiplas carteiras e acompanhe alocação</div>
+        <h1 className="text-2xl font-semibold text-[var(--text-primary)]">{t("portfolio.title")}</h1>
+        <div className="text-sm text-[var(--text-muted)]">{t("portfolio.subtitle")}</div>
       </div>
 
       {/* TOP ROW: selector + stats (alinhado na mesma grid 5 colunas) */}
@@ -905,13 +946,13 @@ export default function PortfolioPage() {
         <div className="lg:col-span-3 bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
             <div className="md:col-span-9">
-              <label className="block text-sm font-medium text-[var(--text-primary)]">Nome da carteira</label>
+              <label className="block text-sm font-medium text-[var(--text-primary)]">{t("portfolio.form.nameLabel")}</label>
 
               <div className="mt-2 flex items-center gap-3">
                 <input
                   value={portfolioName}
                   onChange={(e) => setPortfolioName(e.target.value)}
-                  placeholder="Minha carteira"
+                  placeholder={lang === "pt-BR" ? "Minha carteira" : "My portfolio"}
                   className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2 text-sm
                             text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-[var(--primary)]/30"
                 />
@@ -921,13 +962,15 @@ export default function PortfolioPage() {
                   className="shrink-0 rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-2 text-sm font-semibold
                             text-[var(--text-primary)] hover:bg-[var(--surface)]"
                 >
-                  Limpar carteira
+                  {t("portfolio.form.clearBtn")}
                 </button>
               </div>
 
               {nameTakenByOther ? (
                 <div className="mt-2 text-xs text-[color:var(--sell)]">
-                  Já existe uma carteira com esse nome (o nome é o identificador). Troque para salvar.
+                  {lang === "pt-BR"
+                    ? "Já existe uma carteira com esse nome (o nome é o identificador). Troque para salvar."
+                    : "A portfolio with this name already exists (name is the identifier). Change it to save."}
                 </div>
               ) : (
                 <div className="mt-2 text-xs text-[var(--text-muted)]">O nome é único e identifica a carteira no banco.</div>
@@ -940,20 +983,20 @@ export default function PortfolioPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Import card */}
             <div className="bg-[var(--surface-alt)] border border-[var(--border)] rounded-2xl p-4 space-y-3">
-              <div className="text-sm font-semibold text-[var(--text-primary)]">Importar arquivo B3</div>
+              <div className="text-sm font-semibold text-[var(--text-primary)]">{t("portfolio.importCard.title")}</div>
 
               <div className="space-y-2">
-                <label className="block text-xs text-[var(--text-muted)]">Arquivo (XLSX)</label>
+                <label className="block text-xs text-[var(--text-muted)]">{t("portfolio.importCard.fileLabel")}</label>
 
                 <div className="flex items-center gap-2 flex-wrap">
                   <label
                     className="max-w-full inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)]
                               px-3 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--surface-alt)] cursor-pointer"
                   >
-                    <span className="font-medium shrink-0">Selecionar</span>
+                    <span className="font-medium shrink-0">{t("common.select")}</span>
 
                     <span className="min-w-0 flex-1 text-[var(--text-muted)] truncate">
-                      {file ? file.name : data?.meta?.filename ?? "Nenhum arquivo"}
+                      {file ? file.name : data?.meta?.filename ?? t("portfolio.importCard.noneFile")}
                     </span>
 
                     <input
@@ -971,23 +1014,21 @@ export default function PortfolioPage() {
                     className="rounded-xl bg-[var(--primary)] text-[var(--on-primary)] px-4 py-2 text-sm font-semibold
                                hover:bg-[var(--primary-hover)] disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    {loading ? "Importando..." : "Importar"}
+                    {loading ? t("portfolio.importCard.importing") : t("portfolio.importCard.importBtn")}
                   </button>
                 </div>
 
-                <div className="text-xs text-[var(--text-muted)]">
-                  Importar arquivo atualiza a edição da tela. Para gravar no banco, clique em “Salvar no banco”.
-                </div>
+                <div className="text-xs text-[var(--text-muted)]">{t("portfolio.importCard.hint")}</div>
               </div>
             </div>
 
             {/* Manual card */}
             <div className="bg-[var(--surface-alt)] border border-[var(--border)] rounded-2xl p-4 space-y-3">
-              <div className="text-sm font-semibold text-[var(--text-primary)]">Adicionar manualmente</div>
+              <div className="text-sm font-semibold text-[var(--text-primary)]">{t("portfolio.manualCard.title")}</div>
 
               <div className="grid grid-cols-1 gap-3">
                 <div className="relative">
-                  <label className="block text-xs text-[var(--text-muted)] mb-1">Ativo</label>
+                  <label className="block text-xs text-[var(--text-muted)] mb-1">{t("portfolio.manualCard.asset")}</label>
 
                   <div className="relative group">
                     <input
@@ -999,7 +1040,7 @@ export default function PortfolioPage() {
                       }}
                       onFocus={handleFocus}
                       onBlur={handleBlur}
-                      placeholder="Digite ticker (ex.: HGLG11, VALE3...)"
+                      placeholder={lang === "pt-BR" ? "Digite ticker (ex.: HGLG11, VALE3...)" : "Type ticker (e.g., HGLG11, VALE3...)"}
                       className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 pr-10 text-sm
                                  text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-[var(--primary)]/30"
                     />
@@ -1007,7 +1048,19 @@ export default function PortfolioPage() {
                     <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
                       {sugLoading || priceLoading || assetIndexLoading ? (
                         <span
-                          title={assetIndexLoading ? "Carregando ativos..." : priceLoading ? "Buscando preço..." : "Buscando sugestões..."}
+                          title={
+                            assetIndexLoading
+                              ? lang === "pt-BR"
+                                ? "Carregando ativos..."
+                                : "Loading assets..."
+                              : priceLoading
+                                ? lang === "pt-BR"
+                                  ? "Buscando preço..."
+                                  : "Fetching price..."
+                                : lang === "pt-BR"
+                                  ? "Buscando sugestões..."
+                                  : "Searching..."
+                          }
                           className="h-2 w-2 rounded-full bg-[var(--text-muted)]/60 group-hover:bg-[var(--text-primary)]/60"
                         />
                       ) : null}
@@ -1016,7 +1069,7 @@ export default function PortfolioPage() {
 
                   {showSug && !sugLoading && remoteSug.length > 0 ? (
                     <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-lg">
-                      {remoteSug.map((ticker) => (
+                      {remoteSug.map((ticker: string) => (
                         <button
                           key={ticker}
                           type="button"
@@ -1033,11 +1086,11 @@ export default function PortfolioPage() {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs text-[var(--text-muted)] mb-1">Quantidade</label>
+                    <label className="block text-xs text-[var(--text-muted)] mb-1">{t("portfolio.manualCard.quantity")}</label>
                     <input
                       value={qty}
                       onChange={(e) => setQty(e.target.value)}
-                      placeholder="ex.: 10"
+                      placeholder={lang === "pt-BR" ? "ex.: 10" : "e.g. 10"}
                       inputMode="decimal"
                       className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm
                                  text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-[var(--primary)]/30"
@@ -1045,11 +1098,11 @@ export default function PortfolioPage() {
                   </div>
 
                   <div>
-                    <label className="block text-xs text-[var(--text-muted)] mb-1">Preço (opcional)</label>
+                    <label className="block text-xs text-[var(--text-muted)] mb-1">{t("portfolio.manualCard.priceOpt")}</label>
                     <input
                       value={manualPrice}
                       onChange={(e) => setManualPrice(e.target.value)}
-                      placeholder="usa BD/Prices se vazio"
+                      placeholder={lang === "pt-BR" ? "usa BD/Prices se vazio" : "uses DB/Prices if empty"}
                       inputMode="decimal"
                       className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm
                                  text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-[var(--primary)]/30"
@@ -1064,7 +1117,7 @@ export default function PortfolioPage() {
                     className="rounded-xl bg-[var(--primary)] text-[var(--on-primary)] px-4 py-2 text-sm font-semibold
                                hover:bg-[var(--primary-hover)]"
                   >
-                    Adicionar
+                    {t("common.add")}
                   </button>
                 </div>
               </div>
@@ -1079,13 +1132,15 @@ export default function PortfolioPage() {
         <div className="lg:col-span-2 space-y-4">
           <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5 space-y-3">
             <div className="flex items-center justify-between">
-              <div className="text-sm font-semibold text-[var(--text-primary)]">Alocação atual</div>
-              <div className="text-xs text-[var(--text-muted)]">{holdings.length ? `${holdings.length} ativos` : "sem ativos"}</div>
+              <div className="text-sm font-semibold text-[var(--text-primary)]">{t("portfolio.allocation.title")}</div>
+              <div className="text-xs text-[var(--text-muted)]">
+                {holdings.length ? t("portfolio.holdings.items", { count: holdings.length }) : (lang === "pt-BR" ? "sem ativos" : "no assets")}
+              </div>
             </div>
 
             {holdings.length === 0 ? (
               <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface-alt)] p-4 text-sm text-[var(--text-muted)]">
-                Nenhum ativo ainda. Importe um XLSX da B3 ou adicione manualmente para ver a alocação.
+                {t("portfolio.allocation.emptyHint")}
               </div>
             ) : (
               <div className="grid grid-cols-3 gap-3 text-sm">
@@ -1093,7 +1148,7 @@ export default function PortfolioPage() {
                   <div className="absolute right-2 top-2 text-[10px] px-2 py-0.5 rounded-full border border-[var(--border)] text-[var(--text-muted)] bg-[var(--surface)]/60">
                     {totals.count.stocks}
                   </div>
-                  <div className="text-xs text-[var(--text-muted)]">Ações</div>
+                  <div className="text-xs text-[var(--text-muted)]">{labelStocks}</div>
                   <div className="mt-1 font-semibold text-[var(--text-primary)]">{fmtPct(totals.pctValue.stocks)}</div>
                 </div>
 
@@ -1101,7 +1156,7 @@ export default function PortfolioPage() {
                   <div className="absolute right-2 top-2 text-[10px] px-2 py-0.5 rounded-full border border-[var(--border)] text-[var(--text-muted)] bg-[var(--surface)]/60">
                     {totals.count.fiis}
                   </div>
-                  <div className="text-xs text-[var(--text-muted)]">FIIs</div>
+                  <div className="text-xs text-[var(--text-muted)]">{labelFiis}</div>
                   <div className="mt-1 font-semibold text-[var(--text-primary)]">{fmtPct(totals.pctValue.fiis)}</div>
                 </div>
 
@@ -1109,7 +1164,7 @@ export default function PortfolioPage() {
                   <div className="absolute right-2 top-2 text-[10px] px-2 py-0.5 rounded-full border border-[var(--border)] text-[var(--text-muted)] bg-[var(--surface)]/60">
                     {totals.count.bonds}
                   </div>
-                  <div className="text-xs text-[var(--text-muted)]">RF</div>
+                  <div className="text-xs text-[var(--text-muted)]">{labelBonds}</div>
                   <div className="mt-1 font-semibold text-[var(--text-primary)]">{fmtPct(totals.pctValue.bonds)}</div>
                 </div>
               </div>
@@ -1123,7 +1178,7 @@ export default function PortfolioPage() {
             className="w-full rounded-2xl bg-[var(--primary)] text-[var(--on-primary)] px-4 py-3 text-sm font-semibold
                        hover:bg-[var(--primary-hover)] disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            {saveLoading ? "Salvando..." : selectedPortfolioId === "" ? "Salvar no banco (criar)" : "Salvar no banco (atualizar)"}
+            {saveLoading ? t("portfolio.save.saving") : selectedPortfolioId === "" ? t("portfolio.save.create") : t("portfolio.save.update")}
           </button>
         </div>
       </section>
@@ -1132,9 +1187,10 @@ export default function PortfolioPage() {
       <section className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5 space-y-4">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="space-y-1">
-            <div className="text-lg font-semibold text-[var(--text-primary)]">Posições</div>
+            <div className="text-lg font-semibold text-[var(--text-primary)]">{t("portfolio.holdings.title")}</div>
             <div className="text-sm text-[var(--text-muted)]">
-              {data?.meta?.filename ? `Base: ${data.meta.filename}` : "Base: (sem import/DB)"} • {holdings.length} itens
+              {(data?.meta?.filename ? t("portfolio.holdings.baseWith", { filename: data.meta.filename }) : t("portfolio.holdings.baseNone"))} •{" "}
+              {t("portfolio.holdings.items", { count: holdings.length })}
             </div>
           </div>
 
@@ -1150,7 +1206,7 @@ export default function PortfolioPage() {
                     : "bg-transparent border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:border-[var(--border)]",
                 ].join(" ")}
               >
-                {k === "all" ? "Tudo" : k === "stocks" ? "Ações" : k === "fiis" ? "FIIs" : k === "bonds" ? "RF" : "Outros"}
+                {tabLabel(k)}
               </button>
             ))}
           </div>
@@ -1161,12 +1217,12 @@ export default function PortfolioPage() {
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-[var(--surface)]/95 backdrop-blur border-b border-[var(--border)]">
                 <tr className="text-left">
-                  <th className="p-3 font-semibold text-[var(--text-muted)]">Ativo</th>
-                  <th className="p-3 font-semibold text-[var(--text-muted)] text-center">Tipo</th>
-                  <th className="p-3 font-semibold text-[var(--text-muted)] text-right">Qtd</th>
-                  <th className="p-3 font-semibold text-[var(--text-muted)] text-right">Preço</th>
-                  <th className="p-3 font-semibold text-[var(--text-muted)] text-right">Valor</th>
-                  <th className="p-3 font-semibold text-[var(--text-muted)] text-center">Nota</th>
+                  <th className="p-3 font-semibold text-[var(--text-muted)]">{t("portfolio.holdings.table.asset")}</th>
+                  <th className="p-3 font-semibold text-[var(--text-muted)] text-center">{t("portfolio.holdings.table.type")}</th>
+                  <th className="p-3 font-semibold text-[var(--text-muted)] text-right">{t("portfolio.holdings.table.qty")}</th>
+                  <th className="p-3 font-semibold text-[var(--text-muted)] text-right">{t("portfolio.holdings.table.price")}</th>
+                  <th className="p-3 font-semibold text-[var(--text-muted)] text-right">{t("portfolio.holdings.table.value")}</th>
+                  <th className="p-3 font-semibold text-[var(--text-muted)] text-center">{t("portfolio.holdings.table.note")}</th>
                   <th className="p-3 font-semibold text-[var(--text-muted)] text-center"></th>
                 </tr>
               </thead>
@@ -1191,7 +1247,7 @@ export default function PortfolioPage() {
 
                         <td className="p-3 align-middle">
                           <div className="flex items-center justify-center">
-                            <Badge cls={h.cls} />
+                            <Badge cls={h.cls} label={badgeLabel(h.cls)} />
                           </div>
                         </td>
 
@@ -1206,8 +1262,8 @@ export default function PortfolioPage() {
                               onClick={() => setNotesByTicker((prev) => ({ ...prev, [tk]: clampNote((prev[tk] ?? 10) - 1) }))}
                               className="h-8 w-8 rounded-lg border border-[var(--border)] bg-[var(--surface)]
                                          text-[var(--text-primary)] hover:bg-[var(--surface-alt)]"
-                              aria-label="Diminuir nota"
-                              title="Diminuir"
+                              aria-label={lang === "pt-BR" ? "Diminuir nota" : "Decrease note"}
+                              title={lang === "pt-BR" ? "Diminuir" : "Decrease"}
                             >
                               −
                             </button>
@@ -1229,8 +1285,8 @@ export default function PortfolioPage() {
                               onClick={() => setNotesByTicker((prev) => ({ ...prev, [tk]: clampNote((prev[tk] ?? 10) + 1) }))}
                               className="h-8 w-8 rounded-lg border border-[var(--border)] bg-[var(--surface)]
                                          text-[var(--text-primary)] hover:bg-[var(--surface-alt)]"
-                              aria-label="Aumentar nota"
-                              title="Aumentar"
+                              aria-label={lang === "pt-BR" ? "Aumentar nota" : "Increase note"}
+                              title={lang === "pt-BR" ? "Aumentar" : "Increase"}
                             >
                               +
                             </button>
@@ -1241,7 +1297,7 @@ export default function PortfolioPage() {
                           <button
                             type="button"
                             onClick={() => removeTicker(h.ticker)}
-                            title="Remover"
+                            title={lang === "pt-BR" ? "Remover" : "Remove"}
                             className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)]
                                        text-[var(--text-muted)] hover:text-[color:var(--sell)] hover:border-[color:var(--sell)]/40 hover:bg-[var(--surface-alt)]"
                           >
