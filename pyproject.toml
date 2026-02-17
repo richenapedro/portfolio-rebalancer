@@ -43,8 +43,8 @@ portfolio-rebalancer-api = "portfolio_rebalancer.api.main:main"
 
 [project.optional-dependencies]
 dev = [
-  "pytest",
-  "ruff",
+  "pytest==8.4.0",
+  "ruff==0.9.6",
   "black==25.12.0",
 ]
 
