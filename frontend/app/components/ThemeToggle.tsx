@@ -4,13 +4,14 @@ import * as React from "react";
 import { useTheme } from "next-themes";
 
 export function ThemeToggle() {
-  const { theme, setTheme } = useTheme();
+  const { theme, resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = React.useState(false);
 
   React.useEffect(() => setMounted(true), []);
   if (!mounted) return null;
 
-  const isDark = theme === "dark";
+  const current = resolvedTheme ?? theme; // ✅ valor efetivo
+  const isDark = current === "dark";
 
   return (
     <button

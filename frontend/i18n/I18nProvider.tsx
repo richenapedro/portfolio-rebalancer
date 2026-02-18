@@ -2,9 +2,7 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { dictionaries, type Dict, type Lang, type TranslationKey } from "./dictionaries";
-
-const STORAGE_KEY = "portfolio-rebalancer.lang";
-const DEFAULT_LANG: Lang = "pt-BR";
+import { DEFAULT_LANG, LANG_COOKIE, parseLang } from "./lang";
 
 type Vars = Record<string, string | number | boolean | null | undefined>;
 
@@ -28,10 +26,9 @@ function interpolate(template: string, vars?: Vars): string {
   });
 }
 
-function readStoredLang(): Lang {
-  if (typeof window === "undefined") return DEFAULT_LANG;
-  const v = window.localStorage.getItem(STORAGE_KEY);
-  return v === "en" || v === "pt-BR" ? v : DEFAULT_LANG;
+function setCookieLang(lang: Lang) {
+  // 1 ano
+  document.cookie = `${LANG_COOKIE}=${encodeURIComponent(lang)}; Path=/; Max-Age=31536000; SameSite=Lax`;
 }
 
 type I18nContextValue = {
@@ -43,26 +40,40 @@ type I18nContextValue = {
 
 const I18nContext = createContext<I18nContextValue | null>(null);
 
-export function I18nProvider(props: { children: React.ReactNode }) {
-  const [lang, setLang] = useState<Lang>(() => readStoredLang());
-  const dict = dictionaries[lang];
+export function I18nProvider(props: { children: React.ReactNode; initialLang?: Lang }) {
+  // ✅ SSR-safe: começa com initialLang vindo do server (cookie)
+  const [lang, _setLang] = useState<Lang>(props.initialLang ?? DEFAULT_LANG);
 
+  // opcional: se quiser respeitar localStorage legado sem causar mismatch,
+  // só lê AFTER mount, e só se for diferente do initialLang.
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(STORAGE_KEY, lang);
-    document.documentElement.lang = lang;
-  }, [lang]);
+    const v = window.localStorage.getItem("portfolio-rebalancer.lang");
+    const stored = parseLang(v);
+    if (stored && stored !== lang) _setLang(stored);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const setLang = useCallback((next: Lang) => {
+    _setLang(next);
+    try {
+      window.localStorage.setItem("portfolio-rebalancer.lang", next);
+    } catch {}
+    setCookieLang(next);
+    document.documentElement.lang = next;
+  }, []);
+
+  const dict = dictionaries[lang];
 
   const t = useCallback(
     (key: TranslationKey, vars?: Vars) => {
       const raw = getByPath(dict, key);
-      const s = typeof raw === "string" ? raw : key; // fallback: show key
+      const s = typeof raw === "string" ? raw : key;
       return interpolate(s, vars);
     },
     [dict],
   );
 
-  const value = useMemo<I18nContextValue>(() => ({ lang, setLang, t, dict }), [lang, t, dict]);
+  const value = useMemo<I18nContextValue>(() => ({ lang, setLang, t, dict }), [lang, setLang, t, dict]);
 
   return <I18nContext.Provider value={value}>{props.children}</I18nContext.Provider>;
 }
