@@ -387,52 +387,58 @@ export default function RebalanceContainer() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs text-[var(--text-muted)]">{t("rebalance.import.source")}:</span>
+            <span className="text-xs text-[var(--text-muted)]">{t("rebalance.import.source")}:</span>
 
-              {importSource === "file" ? (
+            {importSource === "file" ? (
                 <span
-                  className="inline-flex items-center gap-2 rounded-full border border-[var(--border)]
-                             bg-[var(--surface-alt)] px-2.5 py-1 text-xs text-[var(--text-primary)] cursor-help"
-                  title={t("rebalance.import.fileChipTitle")}
+                className="inline-flex items-center gap-2 rounded-full border border-[var(--border)]
+                            bg-[var(--surface-alt)] px-2.5 py-1 text-xs text-[var(--text-primary)] cursor-help"
+                title={t("rebalance.import.fileChipTitle")}
                 >
-                  <SourceIcon className="h-4 w-4 text-[var(--text-muted)]" aria-hidden />
-                  {sourceLabel}
+                <SourceIcon className="h-4 w-4 text-[var(--text-muted)]" aria-hidden />
+                {sourceLabel}
                 </span>
-              ) : importSource === "db" ? (
+            ) : importSource === "db" ? (
                 <span
-                  className="inline-flex items-center gap-2 rounded-full border border-[var(--border)]
-                             bg-[var(--surface-alt)] px-2.5 py-1 text-xs text-[var(--text-primary)]"
+                className="inline-flex items-center gap-2 rounded-full border border-[var(--border)]
+                            bg-[var(--surface-alt)] px-2.5 py-1 text-xs text-[var(--text-primary)]"
                 >
-                  <SourceIcon className="h-4 w-4 text-[var(--text-muted)]" aria-hidden />
-                  {sourceLabel} {selectedDbLabel ? `(${selectedDbLabel})` : ""}
+                <SourceIcon className="h-4 w-4 text-[var(--text-muted)]" aria-hidden />
+                {sourceLabel} {selectedDbLabel ? `(${selectedDbLabel})` : ""}
                 </span>
-              ) : (
+            ) : (
                 <span
-                  className="inline-flex items-center gap-2 rounded-full border border-[var(--border)]
-                             bg-[var(--surface-alt)] px-2.5 py-1 text-xs text-[var(--text-muted)]"
+                className="inline-flex items-center gap-2 rounded-full border border-[var(--border)]
+                            bg-[var(--surface-alt)] px-2.5 py-1 text-xs text-[var(--text-muted)]"
                 >
-                  <SourceIcon className="h-4 w-4 text-[var(--text-muted)]" aria-hidden />—
+                <SourceIcon className="h-4 w-4 text-[var(--text-muted)]" aria-hidden />—
                 </span>
-              )}
+            )}
 
-              <span className="text-xs text-[var(--text-muted)]">{t("rebalance.import.file")}:</span>
-              <span className="text-xs font-mono text-[var(--text-primary)]">{file ? file.name : "—"}</span>
+            {/* ✅ só mostra File: quando a origem NÃO é DB */}
+            {importSource !== "db" && (
+                <>
+                <span className="text-xs text-[var(--text-muted)]">{t("rebalance.import.file")}:</span>
+                <span className="text-xs font-mono text-[var(--text-primary)]">{file ? file.name : "—"}</span>
+                </>
+            )}
 
-              {file && (
+            {file && (
                 <button
-                  type="button"
-                  onClick={() => {
+                type="button"
+                onClick={() => {
                     setFile(null);
                     setImportSource(null);
                     setSelectedDbId("");
-                  }}
-                  className="ml-auto inline-flex items-center gap-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                }}
+                className="ml-auto inline-flex items-center gap-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                 >
-                  <X className="h-4 w-4" aria-hidden />
-                  {t("common.remove")}
+                <X className="h-4 w-4" aria-hidden />
+                {t("common.remove")}
                 </button>
-              )}
+            )}
             </div>
+
 
             <div className="text-xs text-[var(--text-muted)]">{t("rebalance.import.hint")}</div>
           </div>

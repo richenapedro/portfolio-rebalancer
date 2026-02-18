@@ -367,7 +367,7 @@ export const en: Dict = {
 
       source: "Source",
       sourceFile: "File",
-      sourceDb: "Database",
+      sourceDb: "Portfolio",
       file: "File",
 
       hint: "• Selecting a DB portfolio imports automatically. • Import file opens the picker and imports automatically.",
@@ -586,7 +586,7 @@ export const ptBR: Dict = {
 
       source: "Fonte",
       sourceFile: "Arquivo",
-      sourceDb: "Banco",
+      sourceDb: "Carteira",
       file: "Arquivo",
 
       hint: "• Selecionar uma carteira do banco importa automaticamente. • Importar arquivo abre o seletor e importa automaticamente.",
