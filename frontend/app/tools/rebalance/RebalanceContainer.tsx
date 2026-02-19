@@ -280,7 +280,7 @@ export default function RebalanceContainer() {
           <SlidersHorizontal className="h-5 w-5 text-[var(--text-muted)]" aria-hidden />
           {t("rebalance.title")}
         </h1>
-        <div className="text-sm text-[var(--text-muted)]">{t("rebalance.subtitle")}</div>
+        {/* <div className="text-sm text-[var(--text-muted)]">{t("rebalance.subtitle")}</div> */}
       </div>
 
       <section className="grid grid-cols-1 lg:grid-cols-5 gap-4">

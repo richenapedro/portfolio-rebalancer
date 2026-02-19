@@ -10,8 +10,15 @@ import {
   Database,
   UploadCloud,
 } from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+} from "react";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   importB3,
   type ImportResponse,
@@ -24,8 +31,13 @@ import {
 import { useI18n } from "@/i18n/I18nProvider";
 
 import ConfirmDialog from "./components/ConfirmDialog";
-import PortfolioFilters, { type HoldingsTab, type AssetClass } from "./components/PortfolioFilters";
-import PortfolioTable, { type HoldingRow } from "./components/PortfolioTable";
+import PortfolioFilters, {
+  type HoldingsTab,
+  type AssetClass,
+} from "./components/PortfolioFilters";
+import PortfolioTable, {
+  type HoldingRow,
+} from "./components/PortfolioTable";
 
 type Position = ImportResponse["positions"][number];
 
@@ -45,7 +57,8 @@ type PickedAsset = {
 
 /* ------------------------- DB endpoints (portfolios) ------------------------ */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
 
 type DbPortfolio = { id: number; name: string };
 type DbPositionRow = {
@@ -68,7 +81,9 @@ async function dbListPortfolios(): Promise<DbPortfolio[]> {
 }
 
 async function dbGetPositions(portfolioId: number): Promise<DbPositionRow[]> {
-  const r = await fetch(`${API_BASE}/api/db/portfolios/${portfolioId}/positions`, { cache: "no-store" });
+  const r = await fetch(`${API_BASE}/api/db/portfolios/${portfolioId}/positions`, {
+    cache: "no-store",
+  });
   if (!r.ok) {
     const txt = await r.text().catch(() => "");
     throw new Error(`get positions failed: ${r.status} ${txt}`);
@@ -77,7 +92,10 @@ async function dbGetPositions(portfolioId: number): Promise<DbPositionRow[]> {
   return j.items ?? [];
 }
 
-async function dbRenamePortfolio(portfolioId: number, name: string): Promise<void> {
+async function dbRenamePortfolio(
+  portfolioId: number,
+  name: string,
+): Promise<void> {
   const r = await fetch(`${API_BASE}/api/db/portfolios/${portfolioId}`, {
     method: "PUT",
     headers: { "content-type": "application/json", accept: "application/json" },
@@ -89,7 +107,9 @@ async function dbRenamePortfolio(portfolioId: number, name: string): Promise<voi
   }
 }
 
-async function dbCreatePortfolio(name: string): Promise<{ id: number; name: string }> {
+async function dbCreatePortfolio(
+  name: string,
+): Promise<{ id: number; name: string }> {
   const r = await fetch(`${API_BASE}/api/db/portfolios`, {
     method: "POST",
     headers: { "content-type": "application/json", accept: "application/json" },
@@ -113,11 +133,14 @@ async function dbReplacePositions(
     source: "manual" | "import";
   }>,
 ): Promise<void> {
-  const r = await fetch(`${API_BASE}/api/db/portfolios/${portfolioId}/positions/replace`, {
-    method: "POST",
-    headers: { "content-type": "application/json", accept: "application/json" },
-    body: JSON.stringify({ positions }),
-  });
+  const r = await fetch(
+    `${API_BASE}/api/db/portfolios/${portfolioId}/positions/replace`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify({ positions }),
+    },
+  );
   if (!r.ok) {
     const txt = await r.text().catch(() => "");
     throw new Error(`replace positions failed: ${r.status} ${txt}`);
@@ -148,13 +171,23 @@ function mapAssetTypeToClass(assetType?: string): AssetClass {
   const at = (assetType ?? "").trim().toLowerCase();
   if (!at) return "other";
   if (at.includes("fii") || at.includes("fundo imobili")) return "fiis";
-  if (at.includes("bond") || at.includes("tesouro") || at.includes("renda fixa") || at === "rf" || at.includes("fixed"))
+  if (
+    at.includes("bond") ||
+    at.includes("tesouro") ||
+    at.includes("renda fixa") ||
+    at === "rf" ||
+    at.includes("fixed")
+  )
     return "bonds";
-  if (at.includes("stock") || at.includes("acao") || at.includes("ação") || at.includes("equity")) return "stocks";
+  if (at.includes("stock") || at.includes("acao") || at.includes("ação") || at.includes("equity"))
+    return "stocks";
   return "other";
 }
 
-function mapDbClsToAssetType(cls?: string | null, ticker?: string | null): Position["asset_type"] {
+function mapDbClsToAssetType(
+  cls?: string | null,
+  ticker?: string | null,
+): Position["asset_type"] {
   const c = (cls ?? "").trim().toLowerCase();
   const t = (ticker ?? "").trim().toUpperCase();
 
@@ -182,12 +215,26 @@ function toAssetClass(v: unknown): AssetClass {
   return v === "stocks" || v === "fiis" || v === "bonds" || v === "other" ? v : "other";
 }
 
-function StatCard(props: { title: React.ReactNode; value: string; hint?: string; className?: string }) {
+function StatCard(props: {
+  title: React.ReactNode;
+  value: string;
+  hint?: string;
+  className?: string;
+}) {
   return (
-    <div className={["bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-4", props.className ?? ""].join(" ")}>
+    <div
+      className={[
+        "bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-4",
+        props.className ?? "",
+      ].join(" ")}
+    >
       <div className="text-xs text-[var(--text-muted)]">{props.title}</div>
-      <div className="mt-1 text-2xl font-semibold tracking-tight text-[var(--text-primary)]">{props.value}</div>
-      {props.hint ? <div className="mt-1 text-xs text-[var(--text-muted)]">{props.hint}</div> : null}
+      <div className="mt-1 text-2xl font-semibold tracking-tight text-[var(--text-primary)]">
+        {props.value}
+      </div>
+      {props.hint ? (
+        <div className="mt-1 text-xs text-[var(--text-muted)]">{props.hint}</div>
+      ) : null}
     </div>
   );
 }
@@ -198,11 +245,18 @@ export default function PortfolioContainer() {
   const { lang, t } = useI18n();
 
   const fmtMoney = useCallback(
-    (n: number) => new Intl.NumberFormat(lang, { style: "currency", currency: "BRL" }).format(n),
+    (n: number) =>
+      new Intl.NumberFormat(lang, { style: "currency", currency: "BRL" }).format(n),
     [lang],
   );
-  const fmtQty = useCallback((n: number) => new Intl.NumberFormat(lang, { maximumFractionDigits: 8 }).format(n), [lang]);
-  const fmtPct = useCallback((n: number) => new Intl.NumberFormat(lang, { maximumFractionDigits: 1 }).format(n) + "%", [lang]);
+  const fmtQty = useCallback(
+    (n: number) => new Intl.NumberFormat(lang, { maximumFractionDigits: 8 }).format(n),
+    [lang],
+  );
+  const fmtPct = useCallback(
+    (n: number) => new Intl.NumberFormat(lang, { maximumFractionDigits: 1 }).format(n) + "%",
+    [lang],
+  );
 
   const [addTab, setAddTab] = useState<"import" | "manual">("import");
 
@@ -251,13 +305,19 @@ export default function PortfolioContainer() {
   const [saveLoading, setSaveLoading] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
 
+  // drag state (IMPORT)
+  const [isDragOver, setIsDragOver] = useState(false);
+
   const assetByTicker = useMemo(() => {
     const m = new Map<string, RemoteAsset>();
     for (const it of assetIndex ?? []) m.set(it.ticker.toUpperCase(), it);
     return m;
   }, [assetIndex]);
 
-  const removedSet = useMemo(() => new Set(removedTickers.map((tk) => tk.toUpperCase())), [removedTickers]);
+  const removedSet = useMemo(
+    () => new Set(removedTickers.map((tk) => tk.toUpperCase())),
+    [removedTickers],
+  );
 
   function removeTicker(ticker: string) {
     const tk = ticker.trim().toUpperCase();
@@ -546,6 +606,55 @@ export default function PortfolioContainer() {
     return holdings.filter((h) => h.cls === tab);
   }, [holdings, tab]);
 
+  function setPickedFile(f: File | null) {
+    setError(null);
+    setSaveMsg(null);
+
+    if (!f) {
+      setFile(null);
+      return;
+    }
+
+    const name = f.name.toLowerCase();
+    const ok = name.endsWith(".xlsx");
+    if (!ok) {
+      setFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      setError(lang === "pt-BR" ? "Arquivo inválido. Use .xlsx" : "Invalid file. Use .xlsx");
+      return;
+    }
+
+    setFile(f);
+    // mantém o input sincronizado quando o arquivo veio via drop
+    if (fileInputRef.current) {
+      const dt = new DataTransfer();
+      dt.items.add(f);
+      fileInputRef.current.files = dt.files;
+    }
+  }
+
+  function onDropXlsx(ev: DragEvent<HTMLLabelElement>) {
+    ev.preventDefault();
+    ev.stopPropagation();
+    setIsDragOver(false);
+
+    const f = ev.dataTransfer?.files?.[0] ?? null;
+    setPickedFile(f);
+  }
+
+  function onDragOverXlsx(ev: DragEvent<HTMLLabelElement>) {
+    // sem isso o drop NÃO dispara em muitos browsers
+    ev.preventDefault();
+    ev.stopPropagation();
+    if (!isDragOver) setIsDragOver(true);
+  }
+
+  function onDragLeaveXlsx(ev: DragEvent<HTMLLabelElement>) {
+    ev.preventDefault();
+    ev.stopPropagation();
+    setIsDragOver(false);
+  }
+
   async function onImport() {
     setError(null);
     setSaveMsg(null);
@@ -563,6 +672,7 @@ export default function PortfolioContainer() {
       setRemovedTickers([]);
 
       if (fileInputRef.current) fileInputRef.current.value = "";
+      setIsDragOver(false);
     } catch (e: unknown) {
       const msg =
         e instanceof Error
@@ -893,7 +1003,11 @@ export default function PortfolioContainer() {
                   ))}
                 </select>
 
-                {dbLoading ? <div className="mt-2 text-xs text-[var(--text-muted)]">{t("portfolio.db.updating")}</div> : null}
+                {dbLoading ? (
+                  <div className="mt-2 text-xs text-[var(--text-muted)]">
+                    {t("portfolio.db.updating")}
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>
@@ -930,7 +1044,9 @@ export default function PortfolioContainer() {
         <div className="lg:col-span-3 bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
             <div className="md:col-span-9">
-              <label className="block text-sm font-medium text-[var(--text-primary)]">{t("portfolio.form.nameLabel")}</label>
+              <label className="block text-sm font-medium text-[var(--text-primary)]">
+                {t("portfolio.form.nameLabel")}
+              </label>
 
               <div className="mt-2 flex items-center gap-3">
                 <input
@@ -957,7 +1073,9 @@ export default function PortfolioContainer() {
                     : "A portfolio with this name already exists (name is the identifier). Change it to save."}
                 </div>
               ) : (
-                <div className="mt-2 text-xs text-[var(--text-muted)]">{t("portfolio.form.uniqueHint")}</div>
+                <div className="mt-2 text-xs text-[var(--text-muted)]">
+                  {t("portfolio.form.uniqueHint")}
+                </div>
               )}
             </div>
 
@@ -1004,9 +1122,21 @@ export default function PortfolioContainer() {
             {/* TAB: IMPORT */}
             {addTab === "import" ? (
               <div className="space-y-3">
-                <div className="text-xs text-[var(--text-muted)]">{t("portfolio.importCard.fileLabel")}</div>
+                <div className="text-xs text-[var(--text-muted)]">
+                  {t("portfolio.importCard.fileLabel")}
+                </div>
 
-                <label className="block cursor-pointer rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface)] p-4 hover:bg-[var(--surface-alt)]">
+                <label
+                  onDragOver={onDragOverXlsx}
+                  onDragLeave={onDragLeaveXlsx}
+                  onDrop={onDropXlsx}
+                  className={[
+                    "block cursor-pointer rounded-2xl border border-dashed bg-[var(--surface)] p-4 transition",
+                    isDragOver
+                      ? "border-[var(--primary)] ring-2 ring-[var(--primary)]/25 bg-[var(--surface-alt)]"
+                      : "border-[var(--border)] hover:bg-[var(--surface-alt)]",
+                  ].join(" ")}
+                >
                   <div className="flex items-start gap-3">
                     <div className="mt-0.5 rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] p-2">
                       <UploadCloud className="h-5 w-5 text-[var(--text-muted)]" />
@@ -1014,7 +1144,13 @@ export default function PortfolioContainer() {
 
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-semibold text-[var(--text-primary)]">
-                        {lang === "pt-BR" ? "Clique para selecionar o XLSX" : "Click to pick the XLSX"}
+                        {lang === "pt-BR"
+                          ? isDragOver
+                            ? "Solte o XLSX aqui"
+                            : "Clique para selecionar o XLSX"
+                          : isDragOver
+                            ? "Drop the XLSX here"
+                            : "Click to pick the XLSX"}
                       </div>
 
                       <div className="mt-1 text-xs text-[var(--text-muted)] truncate">
@@ -1022,7 +1158,9 @@ export default function PortfolioContainer() {
                       </div>
 
                       <div className="mt-2 text-[11px] text-[var(--text-muted)]">
-                        {lang === "pt-BR" ? "Dica: arraste e solte aqui também." : "Tip: you can drag & drop here too."}
+                        {lang === "pt-BR"
+                          ? "Dica: arraste e solte aqui também."
+                          : "Tip: you can drag & drop here too."}
                       </div>
                     </div>
                   </div>
@@ -1032,7 +1170,7 @@ export default function PortfolioContainer() {
                     type="file"
                     accept=".xlsx"
                     className="hidden"
-                    onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                    onChange={(e) => setPickedFile(e.target.files?.[0] ?? null)}
                   />
                 </label>
 
@@ -1055,7 +1193,9 @@ export default function PortfolioContainer() {
             {addTab === "manual" ? (
               <div className="grid grid-cols-1 gap-3">
                 <div className="relative">
-                  <label className="block text-xs text-[var(--text-muted)] mb-1">{t("portfolio.manualCard.asset")}</label>
+                  <label className="block text-xs text-[var(--text-muted)] mb-1">
+                    {t("portfolio.manualCard.asset")}
+                  </label>
 
                   <div className="relative group">
                     <input
@@ -1102,7 +1242,9 @@ export default function PortfolioContainer() {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs text-[var(--text-muted)] mb-1">{t("portfolio.manualCard.quantity")}</label>
+                    <label className="block text-xs text-[var(--text-muted)] mb-1">
+                      {t("portfolio.manualCard.quantity")}
+                    </label>
                     <input
                       value={qty}
                       onChange={(e) => setQty(e.target.value)}
@@ -1114,7 +1256,9 @@ export default function PortfolioContainer() {
                   </div>
 
                   <div>
-                    <label className="block text-xs text-[var(--text-muted)] mb-1">{t("portfolio.manualCard.priceOpt")}</label>
+                    <label className="block text-xs text-[var(--text-muted)] mb-1">
+                      {t("portfolio.manualCard.priceOpt")}
+                    </label>
                     <input
                       value={manualPrice}
                       onChange={(e) => setManualPrice(e.target.value)}
@@ -1148,9 +1292,15 @@ export default function PortfolioContainer() {
         <div className="lg:col-span-2 space-y-4">
           <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5 space-y-3">
             <div className="flex items-center justify-between">
-              <div className="text-sm font-semibold text-[var(--text-primary)]">{t("portfolio.allocation.title")}</div>
+              <div className="text-sm font-semibold text-[var(--text-primary)]">
+                {t("portfolio.allocation.title")}
+              </div>
               <div className="text-xs text-[var(--text-muted)]">
-                {holdings.length ? t("portfolio.holdings.items", { count: holdings.length }) : lang === "pt-BR" ? "sem ativos" : "no assets"}
+                {holdings.length
+                  ? t("portfolio.holdings.items", { count: holdings.length })
+                  : lang === "pt-BR"
+                    ? "sem ativos"
+                    : "no assets"}
               </div>
             </div>
 
@@ -1165,7 +1315,9 @@ export default function PortfolioContainer() {
                     {totals.count.stocks}
                   </div>
                   <div className="text-xs text-[var(--text-muted)]">{labelStocks}</div>
-                  <div className="mt-1 font-semibold text-[var(--text-primary)]">{fmtPct(totals.pctValue.stocks)}</div>
+                  <div className="mt-1 font-semibold text-[var(--text-primary)]">
+                    {fmtPct(totals.pctValue.stocks)}
+                  </div>
                 </div>
 
                 <div className="relative rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] p-3 transition">
@@ -1173,7 +1325,9 @@ export default function PortfolioContainer() {
                     {totals.count.fiis}
                   </div>
                   <div className="text-xs text-[var(--text-muted)]">{labelFiis}</div>
-                  <div className="mt-1 font-semibold text-[var(--text-primary)]">{fmtPct(totals.pctValue.fiis)}</div>
+                  <div className="mt-1 font-semibold text-[var(--text-primary)]">
+                    {fmtPct(totals.pctValue.fiis)}
+                  </div>
                 </div>
 
                 <div className="relative rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] p-3 transition">
@@ -1181,7 +1335,9 @@ export default function PortfolioContainer() {
                     {totals.count.bonds}
                   </div>
                   <div className="text-xs text-[var(--text-muted)]">{labelBonds}</div>
-                  <div className="mt-1 font-semibold text-[var(--text-primary)]">{fmtPct(totals.pctValue.bonds)}</div>
+                  <div className="mt-1 font-semibold text-[var(--text-primary)]">
+                    {fmtPct(totals.pctValue.bonds)}
+                  </div>
                 </div>
               </div>
             )}
@@ -1198,7 +1354,11 @@ export default function PortfolioContainer() {
                       disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <Save className="h-5 w-5 shrink-0" />
-            {saveLoading ? t("portfolio.save.saving") : selectedPortfolioId === "" ? t("portfolio.save.create") : t("portfolio.save.update")}
+            {saveLoading
+              ? t("portfolio.save.saving")
+              : selectedPortfolioId === ""
+                ? t("portfolio.save.create")
+                : t("portfolio.save.update")}
           </button>
         </div>
       </section>
@@ -1213,7 +1373,12 @@ export default function PortfolioContainer() {
             </div>
           </div>
 
-          <PortfolioFilters tabs={availableTabs} active={tab} onChange={setTab} tabLabel={tabLabel} />
+          <PortfolioFilters
+            tabs={availableTabs}
+            active={tab}
+            onChange={setTab}
+            tabLabel={tabLabel}
+          />
         </div>
 
         <PortfolioTable
@@ -1224,7 +1389,9 @@ export default function PortfolioContainer() {
           badgeLabel={badgeLabel}
           notesByTicker={notesByTicker}
           clampNote={clampNote}
-          onSetNote={(ticker, note) => setNotesByTicker((prev) => ({ ...prev, [ticker.toUpperCase()]: note }))}
+          onSetNote={(ticker, note) =>
+            setNotesByTicker((prev) => ({ ...prev, [ticker.toUpperCase()]: note }))
+          }
           onRemove={removeTicker}
           emptyText={holdingsEmptyText}
         />
