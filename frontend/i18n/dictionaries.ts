@@ -27,48 +27,47 @@ export type Dict = {
   portfolio: {
     title: string;
     subtitle: string;
-    // dentro de type Dict { portfolio: { ... } }
 
     defaults: {
-    portfolioName: string;
+      portfolioName: string;
     };
 
     stats: {
-    totalInvested: string;
-    assets: string;
+      totalInvested: string;
+      assets: string;
     };
 
     placeholders: {
-    ticker: string;
-    qty: string;
-    priceOpt: string;
+      ticker: string;
+      qty: string;
+      priceOpt: string;
     };
 
     errors: {
-    importNoFile: string;
-    importFailed: string;
-    manualPickValid: string;
-    manualInvalidQty: string;
-    manualInvalidPrice: string;
-    saveNeedName: string;
-    saveNameTaken: string;
-    saveEmpty: string;
-    saveFailed: string;
-    deleteNeedSelect: string;
-    deleteDone: string;
+      importNoFile: string;
+      importFailed: string;
+      manualPickValid: string;
+      manualInvalidQty: string;
+      manualInvalidPrice: string;
+      saveNeedName: string;
+      saveNameTaken: string;
+      saveEmpty: string;
+      saveFailed: string;
+      deleteNeedSelect: string;
+      deleteDone: string;
     };
 
     misc: {
-    noAssets: string;
-    noPositionsInFilter: string;
-    noDataYet: string;
-    noteDecrease: string;
-    noteIncrease: string;
-    remove: string;
-    loadingAssets: string;
-    fetchingPrice: string;
-    searching: string;
-    selectDbPortfolio: string;
+      noAssets: string;
+      noPositionsInFilter: string;
+      noDataYet: string;
+      noteDecrease: string;
+      noteIncrease: string;
+      remove: string;
+      loadingAssets: string;
+      fetchingPrice: string;
+      searching: string;
+      selectDbPortfolio: string;
     };
 
     db: {
@@ -184,6 +183,11 @@ export type Dict = {
     errors: {
       weightsMustBe100: string;
       calcErrorTitle: string;
+
+      // ✅ NEW
+      selectSource: string;
+      missingFile: string;
+      dbNoPositions: string;
     };
 
     summary: {
@@ -220,14 +224,41 @@ export type Dict = {
     };
 
     breakdown: {
-        before: string;
-        after: string;
+      before: string;
+      after: string;
     };
 
     hint: {
       tablesDependOn: string;
       holdingsBefore: string;
       holdingsAfter: string;
+    };
+
+    // ✅ NEW
+    badges: {
+      stocks: string;
+      fiis: string;
+      bonds: string;
+      other: string;
+    };
+
+    // ✅ NEW
+    notes: {
+      title: string;
+      hint: string;
+
+      headers: {
+        ticker: string;
+        type: string;
+        qty: string;
+        price: string;
+        note: string;
+      };
+
+      decrease: string;
+      increase: string;
+      decreaseAria: string;
+      increaseAria: string;
     };
   };
 };
@@ -255,42 +286,47 @@ export const en: Dict = {
   portfolio: {
     title: "Portfolio",
     subtitle: "Manage multiple portfolios and track allocation",
+
     defaults: {
-    portfolioName: "My portfolio",
+      portfolioName: "My portfolio",
     },
+
     stats: {
-    totalInvested: "Total invested",
-    assets: "Assets",
+      totalInvested: "Total invested",
+      assets: "Assets",
     },
+
     placeholders: {
-    ticker: "Type ticker (e.g., HGLG11, VALE3...)",
-    qty: "e.g. 10",
-    priceOpt: "uses DB/Prices if empty",
+      ticker: "Type ticker (e.g., HGLG11, VALE3...)",
+      qty: "e.g. 10",
+      priceOpt: "uses DB/Prices if empty",
     },
+
     errors: {
-    importNoFile: "Select a B3 XLSX file to import.",
-    importFailed: "Failed to import file.",
-    manualPickValid: "Pick a valid asset from the list.",
-    manualInvalidQty: "Invalid quantity.",
-    manualInvalidPrice: "Invalid price. Enter a price or ensure it exists in the DB.",
-    saveNeedName: "Enter a portfolio name.",
-    saveNameTaken: "A portfolio with this name already exists. Choose another name.",
-    saveEmpty: "Nothing to save: the portfolio is empty.",
-    saveFailed: "Failed to save to DB.",
-    deleteNeedSelect: "Select a portfolio from the DB to delete.",
-    deleteDone: "Portfolio deleted.",
+      importNoFile: "Select a B3 XLSX file to import.",
+      importFailed: "Failed to import file.",
+      manualPickValid: "Pick a valid asset from the list.",
+      manualInvalidQty: "Invalid quantity.",
+      manualInvalidPrice: "Invalid price. Enter a price or ensure it exists in the DB.",
+      saveNeedName: "Enter a portfolio name.",
+      saveNameTaken: "A portfolio with this name already exists. Choose another name.",
+      saveEmpty: "Nothing to save: the portfolio is empty.",
+      saveFailed: "Failed to save to DB.",
+      deleteNeedSelect: "Select a portfolio from the DB to delete.",
+      deleteDone: "Portfolio deleted.",
     },
+
     misc: {
-    noAssets: "no assets",
-    noPositionsInFilter: "No positions in this filter.",
-    noDataYet: "No data yet — import, pick from DB or add manually.",
-    noteDecrease: "Decrease",
-    noteIncrease: "Increase",
-    remove: "Remove",
-    loadingAssets: "Loading assets...",
-    fetchingPrice: "Fetching price...",
-    searching: "Searching...",
-    selectDbPortfolio: "Select a DB portfolio",
+      noAssets: "no assets",
+      noPositionsInFilter: "No positions in this filter.",
+      noDataYet: "No data yet — import, pick from DB or add manually.",
+      noteDecrease: "Decrease",
+      noteIncrease: "Increase",
+      remove: "Remove",
+      loadingAssets: "Loading assets...",
+      fetchingPrice: "Fetching price...",
+      searching: "Searching...",
+      selectDbPortfolio: "Select a DB portfolio",
     },
 
     db: {
@@ -406,6 +442,11 @@ export const en: Dict = {
     errors: {
       weightsMustBe100: "Sliders must sum to 100% to calculate.",
       calcErrorTitle: "Calculation error",
+
+      // ✅ NEW
+      selectSource: "Select a source (file or DB) first.",
+      missingFile: "Missing file.",
+      dbNoPositions: "DB portfolio has no positions.",
     },
 
     summary: {
@@ -436,17 +477,47 @@ export const en: Dict = {
     trades: {
       title: "Trades",
     },
+
     common: {
-        total: "Total",
+      total: "Total",
     },
+
     breakdown: {
-        before: "Breakdown (before)",
-        after: "Breakdown (after)",
+      before: "Breakdown (before)",
+      after: "Breakdown (after)",
     },
+
     hint: {
       tablesDependOn: "⚠️ Tables depend on the backend returning",
       holdingsBefore: "holdings_before",
       holdingsAfter: "holdings_after",
+    },
+
+    // ✅ NEW
+    badges: {
+      stocks: "Stocks",
+      fiis: "REITs",
+      bonds: "Bonds",
+      other: "Other",
+    },
+
+    // ✅ NEW
+    notes: {
+      title: "Notes / weights per asset",
+      hint: "Import file: default note=10 for all assets (equal). DB: uses saved note per asset (fallback 10).",
+
+      headers: {
+        ticker: "Ticker",
+        type: "Type",
+        qty: "Qty",
+        price: "Price",
+        note: "Note",
+      },
+
+      decrease: "Decrease",
+      increase: "Increase",
+      decreaseAria: "Decrease note",
+      increaseAria: "Increase note",
     },
   },
 };
@@ -474,42 +545,47 @@ export const ptBR: Dict = {
   portfolio: {
     title: "Carteira",
     subtitle: "Gerencie múltiplas carteiras e acompanhe alocação",
+
     defaults: {
-    portfolioName: "Minha carteira",
+      portfolioName: "Minha carteira",
     },
+
     stats: {
-    totalInvested: "Total investido",
-    assets: "Ativos",
+      totalInvested: "Total investido",
+      assets: "Ativos",
     },
+
     placeholders: {
-    ticker: "Digite ticker (ex.: HGLG11, VALE3...)",
-    qty: "ex.: 10",
-    priceOpt: "usa BD/Prices se vazio",
+      ticker: "Digite ticker (ex.: HGLG11, VALE3...)",
+      qty: "ex.: 10",
+      priceOpt: "usa BD/Prices se vazio",
     },
+
     errors: {
-    importNoFile: "Selecione um arquivo B3 (XLSX) para importar.",
-    importFailed: "Falha ao importar arquivo.",
-    manualPickValid: "Selecione um ativo válido na lista.",
-    manualInvalidQty: "Quantidade inválida.",
-    manualInvalidPrice: "Preço inválido. Digite um preço ou garanta que exista no BD.",
-    saveNeedName: "Digite um nome para a carteira.",
-    saveNameTaken: "Já existe uma carteira com esse nome. Escolha outro nome.",
-    saveEmpty: "Nada para salvar: a carteira está vazia.",
-    saveFailed: "Falha ao salvar no banco.",
-    deleteNeedSelect: "Selecione uma carteira do banco para excluir.",
-    deleteDone: "Carteira excluída.",
+      importNoFile: "Selecione um arquivo B3 (XLSX) para importar.",
+      importFailed: "Falha ao importar arquivo.",
+      manualPickValid: "Selecione um ativo válido na lista.",
+      manualInvalidQty: "Quantidade inválida.",
+      manualInvalidPrice: "Preço inválido. Digite um preço ou garanta que exista no BD.",
+      saveNeedName: "Digite um nome para a carteira.",
+      saveNameTaken: "Já existe uma carteira com esse nome. Escolha outro nome.",
+      saveEmpty: "Nada para salvar: a carteira está vazia.",
+      saveFailed: "Falha ao salvar no banco.",
+      deleteNeedSelect: "Selecione uma carteira do banco para excluir.",
+      deleteDone: "Carteira excluída.",
     },
+
     misc: {
-    noAssets: "sem ativos",
-    noPositionsInFilter: "Nenhuma posição nesse filtro.",
-    noDataYet: "Sem dados ainda — importe, selecione do banco ou adicione manualmente.",
-    noteDecrease: "Diminuir",
-    noteIncrease: "Aumentar",
-    remove: "Remover",
-    loadingAssets: "Carregando ativos...",
-    fetchingPrice: "Buscando preço...",
-    searching: "Buscando sugestões...",
-    selectDbPortfolio: "Selecione uma carteira do banco",
+      noAssets: "sem ativos",
+      noPositionsInFilter: "Nenhuma posição nesse filtro.",
+      noDataYet: "Sem dados ainda — importe, selecione do banco ou adicione manualmente.",
+      noteDecrease: "Diminuir",
+      noteIncrease: "Aumentar",
+      remove: "Remover",
+      loadingAssets: "Carregando ativos...",
+      fetchingPrice: "Buscando preço...",
+      searching: "Buscando sugestões...",
+      selectDbPortfolio: "Selecione uma carteira do banco",
     },
 
     db: {
@@ -605,7 +681,7 @@ export const ptBR: Dict = {
     },
 
     controls: {
-      cash: "Cash",
+      cash: "Caixa",
       mode: "Modo",
     },
 
@@ -625,6 +701,11 @@ export const ptBR: Dict = {
     errors: {
       weightsMustBe100: "A soma dos sliders deve ser 100% para calcular.",
       calcErrorTitle: "Erro do cálculo",
+
+      // ✅ NEW
+      selectSource: "Selecione uma fonte primeiro (arquivo ou banco).",
+      missingFile: "Arquivo ausente.",
+      dbNoPositions: "Essa carteira do banco não tem posições.",
     },
 
     summary: {
@@ -655,21 +736,50 @@ export const ptBR: Dict = {
     trades: {
       title: "Trades",
     },
+
     common: {
-        total: "Total",
+      total: "Total",
     },
+
     breakdown: {
-        before: "Distribuição (antes)",
-        after: "Distribuição (depois)",
+      before: "Distribuição (antes)",
+      after: "Distribuição (depois)",
     },
+
     hint: {
       tablesDependOn: "⚠️ As tabelas dependem do backend retornar",
       holdingsBefore: "holdings_before",
       holdingsAfter: "holdings_after",
     },
+
+    // ✅ NEW
+    badges: {
+      stocks: "Ações",
+      fiis: "FIIs",
+      bonds: "RF",
+      other: "Outros",
+    },
+
+    // ✅ NEW
+    notes: {
+      title: "Notas / pesos por ativo",
+      hint: "Arquivo: nota padrão=10 para todos (igual). Banco: usa a nota salva por ativo (fallback 10).",
+
+      headers: {
+        ticker: "Ticker",
+        type: "Tipo",
+        qty: "Qtd",
+        price: "Preço",
+        note: "Nota",
+      },
+
+      decrease: "Diminuir",
+      increase: "Aumentar",
+      decreaseAria: "Diminuir nota",
+      increaseAria: "Aumentar nota",
+    },
   },
 };
-
 
 export const dictionaries: Record<Lang, Dict> = {
   "pt-BR": ptBR,

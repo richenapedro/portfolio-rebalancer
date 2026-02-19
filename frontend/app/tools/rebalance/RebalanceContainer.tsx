@@ -7,16 +7,67 @@ import { TradesTable } from "../../components/TradesTable";
 import { useI18n } from "@/i18n/I18nProvider";
 import { createRebalanceB3Job, getJob, type JobStatusResponse, importB3 } from "@/lib/api";
 
-import { BarChart3, Database, FileUp, Loader2, Play, SlidersHorizontal, Upload, Wallet, X } from "lucide-react";
+import { BarChart3, Database, FileUp, Loader2, Minus, Play, Plus, SlidersHorizontal, Upload, Wallet, X } from "lucide-react";
+
 
 import HoldingsBeforeTable from "./components/HoldingsBeforeTable";
 import HoldingsAfterTable from "./components/HoldingsAfterTable";
-import { readHoldingRows, readSummary, readTrades, type HoldingRow, type UnifiedRow, type Mode, type ImportSource } from "./components/helpers";
+import {
+  readHoldingRows,
+  readSummary,
+  readTrades,
+  type HoldingRow,
+  type UnifiedRow,
+  type Mode,
+  type ImportSource,
+  type DbPositionRow,
+  type RebalancePosition,
+  dbRowToAssetType,
+  buildWeightedTargetsFE,
+} from "./components/helpers";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
+type AssetClass = "stocks" | "fiis" | "bonds" | "other";
+
+function asAssetClass(assetType: string): AssetClass {
+  const s = (assetType ?? "").toUpperCase();
+  if (s === "STOCK") return "stocks";
+  if (s === "FII") return "fiis";
+  if (s === "BOND") return "bonds";
+  return "other";
+}
+
+function Badge(props: { cls: AssetClass; label: string }) {
+  const map: Record<AssetClass, { classes: string }> = {
+    stocks: { classes: "bg-[color:var(--sell)]/15 text-[color:var(--sell)] border-[color:var(--sell)]/30" },
+    fiis: { classes: "bg-[color:var(--buy)]/15 text-[color:var(--buy)] border-[color:var(--buy)]/30" },
+    bonds: { classes: "bg-[var(--surface-alt)] text-[var(--text-muted)] border-[var(--border)]" },
+    other: { classes: "bg-[var(--surface-alt)] text-[var(--text-muted)] border-[var(--border)]" },
+  };
+
+  const s = map[props.cls];
+  return (
+    <span className={["inline-flex items-center px-2 py-0.5 rounded-full text-xs border", s.classes].join(" ")}>
+      {props.label}
+    </span>
+  );
+}
 
 export default function RebalanceContainer() {
   const { lang, t } = useI18n();
+  function clampNote(x: unknown): number {
+  const n = Number(x);
+  if (!Number.isFinite(n)) return 10;
+  return Math.min(10, Math.max(0, Math.round(n)));
+}
+
+function badgeLabel(cls: AssetClass): string {
+  if (cls === "stocks") return t("rebalance.badges.stocks");
+  if (cls === "fiis") return t("rebalance.badges.fiis");
+  if (cls === "bonds") return t("rebalance.badges.bonds");
+  return t("rebalance.badges.other");
+}
+
 
   const fmtMoney = useMemo(
     () => (n: number) => new Intl.NumberFormat(lang, { style: "currency", currency: "BRL" }).format(n),
@@ -29,6 +80,10 @@ export default function RebalanceContainer() {
   );
 
   const [file, setFile] = useState<File | null>(null);
+    // ✅ dados importados (serve pra mostrar tabela de notas e também pro modo DB)
+  const [importedPositions, setImportedPositions] = useState<RebalancePosition[]>([]);
+  const [importedPrices, setImportedPrices] = useState<Record<string, number>>({});
+  const [notesByTicker, setNotesByTicker] = useState<Record<string, number>>({});
 
   // DB portfolios
   const [dbPortfolios, setDbPortfolios] = useState<Array<{ id: number; name: string }>>([]);
@@ -75,44 +130,88 @@ export default function RebalanceContainer() {
       setLoadingDb(false);
     }
   }
-
-  async function importFromDbPortfolio(portfolioId: number) {
-    const r = await fetch(`${API_BASE}/api/db/portfolios/${portfolioId}/export_b3_xlsx`);
-    if (!r.ok) {
-      const txt = await r.text().catch(() => "");
-      throw new Error(`export xlsx failed: ${r.status} ${txt}`);
+    function isRecord(x: unknown): x is Record<string, unknown> {
+    return typeof x === "object" && x !== null;
     }
 
-    const blob = await r.blob();
-    const f = new File([blob], `portfolio_${portfolioId}.xlsx`, {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    });
+    function readRequestId(x: unknown): string | null {
+    if (!isRecord(x)) return null;
+    const v = x["request_id"];
+    return typeof v === "string" ? v : null;
+    }
 
+  async function importFromDbPortfolio(portfolioId: number) {
+    // ✅ carrega as posições do DB (com note)
+    const r = await fetch(`${API_BASE}/api/db/portfolios/${portfolioId}/positions`);
+    if (!r.ok) {
+      const txt = await r.text().catch(() => "");
+      throw new Error(`list positions failed: ${r.status} ${txt}`);
+    }
+
+    const j = (await r.json()) as { items: DbPositionRow[] };
+    const items = j.items ?? [];
+
+    // monta positions para rebalance
+    const pos: RebalancePosition[] = [];
+    const prices: Record<string, number> = {};
+    const notes: Record<string, number> = {};
+
+    for (const it of items) {
+      const ticker = (it.ticker ?? "").trim().toUpperCase();
+      if (!ticker) continue;
+
+      const qty = Number(it.quantity ?? 0);
+      if (!Number.isFinite(qty) || qty <= 0) continue;
+
+      // price pode ser null no DB; aqui a gente cai pra 0 e deixa pro usuário ajustar depois (se quiser)
+      const px = Number(it.price ?? 0);
+      const price = Number.isFinite(px) ? px : 0;
+
+      const assetType = dbRowToAssetType(ticker, it.cls);
+
+      pos.push({
+        ticker,
+        asset_type: assetType,
+        quantity: qty,
+        price,
+      });
+
+      prices[ticker] = price;
+
+      // ✅ regra: DB usa note salvo; fallback 10
+      const n = Number(it.note);
+      notes[ticker] = Number.isFinite(n) ? n : 10;
+    }
+
+    // atualiza UI states
     setImportSource("db");
-    setFile(f);
+    setFile(null); // ✅ DB não precisa de arquivo
+    setImportedPositions(pos);
+    setImportedPrices(prices);
+    setNotesByTicker(notes);
 
     setErr(null);
     setJob(null);
     setJobId(null);
 
-    const data = await importB3({ file: f, noTesouro: false });
-    const wc = data.weights_current;
-
-    if (wc) {
-      const s = Number(wc.stocks ?? 0);
-      const fi = Number(wc.fiis ?? 0);
-      const b = Number(wc.bonds ?? 0);
-      const sum = s + fi + b;
-
-      if (sum > 0) {
-        const ns = Math.round((s / sum) * 100);
-        const nfi = Math.round((fi / sum) * 100);
-        let nb = 100 - ns - nfi;
-        if (nb < 0) nb = 0;
-        setWeights({ stocks: ns, fiis: nfi, bonds: nb });
-      }
+    // ✅ opcional: recalcular weights “atuais” pra setar sliders (baseado no value)
+    const totals = { stocks: 0, fiis: 0, bonds: 0 };
+    for (const p of pos) {
+      const v = p.quantity * (prices[p.ticker] ?? 0);
+      if (p.asset_type === "STOCK") totals.stocks += v;
+      else if (p.asset_type === "FII") totals.fiis += v;
+      else if (p.asset_type === "BOND") totals.bonds += v;
+    }
+    const sum = totals.stocks + totals.fiis + totals.bonds;
+    if (sum > 0) {
+      const ns = Math.round((totals.stocks / sum) * 100);
+      const nfi = Math.round((totals.fiis / sum) * 100);
+      let nb = 100 - ns - nfi;
+      if (nb < 0) nb = 0;
+      setWeights({ stocks: ns, fiis: nfi, bonds: nb });
     }
   }
+
 
   useEffect(() => {
     const safeReload = () => void loadDbPortfolios();
@@ -132,9 +231,14 @@ export default function RebalanceContainer() {
   }, []);
 
   async function onRun() {
-    if (!file) return;
     if (!canSubmit) {
       setErr(t("rebalance.errors.weightsMustBe100"));
+      return;
+    }
+
+    if (!importSource) {
+      setErr(t("rebalance.errors.selectSource"));
+
       return;
     }
 
@@ -144,20 +248,107 @@ export default function RebalanceContainer() {
     setJobId(null);
 
     try {
-      const created = await createRebalanceB3Job({
-        file,
-        cash: mode === "BUY" ? cash : 0,
-        mode,
-        noTesouro: false,
-        weights,
-      });
-      setJobId(created.job_id);
+      // =========================
+      // Source: FILE (upload job)
+      // =========================
+      if (importSource === "file") {
+        if (!file) {
+          setErr(t("rebalance.errors.missingFile"));
+          setLoading(false);
+          return;
+        }
+
+        const created = await createRebalanceB3Job({
+          file,
+          cash: mode === "BUY" ? cash : 0,
+          mode,
+          noTesouro: false,
+          weights,
+          notesByTicker, // ✅ manda notes_json pro backend
+        });
+        setJobId(created.job_id);
+        return;
+      }
+
+      // =========================
+      // Source: DB (no file)
+      // =========================
+      if (importSource === "db") {
+        if (!importedPositions.length) {
+          setErr(t("rebalance.errors.dbNoPositions"));
+          setLoading(false);
+          return;
+        }
+
+        // gera targets no FE usando notes por ticker (DB usa nota salva; você já colocou no state)
+        const targets = buildWeightedTargetsFE({
+          positions: importedPositions,
+          w_stock: weights.stocks,
+          w_fii: weights.fiis,
+          w_bond: weights.bonds,
+          include_tesouro: true, // hoje você sempre noTesouro=false no UI
+          notesByTicker,
+        });
+
+        // prices: usa o que veio do DB (ou o price da posição)
+        const prices: Record<string, number> = {};
+        for (const p of importedPositions) {
+          const px = importedPrices[p.ticker] ?? p.price ?? 0;
+          prices[p.ticker] = Number.isFinite(px) ? px : 0;
+        }
+
+        const body = {
+          positions: importedPositions.map((p) => ({
+            ticker: p.ticker,
+            asset_type: p.asset_type,
+            quantity: p.quantity,
+            price: prices[p.ticker] ?? p.price ?? 0,
+          })),
+          prices,
+          targets,
+          cash: mode === "BUY" ? cash : 0,
+          mode,
+          fractional: false,
+          min_notional: 0,
+          strict_prices: false,
+          warnings: [],
+        };
+
+        const r = await fetch(`${API_BASE}/api/rebalance`, {
+          method: "POST",
+          headers: { "content-type": "application/json", accept: "application/json" },
+          body: JSON.stringify(body),
+        });
+
+        if (!r.ok) {
+          const txt = await r.text().catch(() => "");
+          throw new Error(`rebalance failed: ${r.status} ${txt}`);
+        }
+
+        const resp: unknown = await r.json();
+
+        // “fake job” local pra UI reaproveitar o renderer atual
+        const requestId = readRequestId(resp) ?? "local";
+
+        setJob({
+            job_id: "local",
+            status: "done",
+            result: resp,          // <- continua unknown, e seus readers já lidam com unknown
+            error: null,
+            request_id: requestId,
+        } satisfies JobStatusResponse);
+
+
+        setLoading(false);
+        return;
+      }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setErr(msg);
       setLoading(false);
     }
   }
+
 
   useEffect(() => {
     if (!jobId) return;
@@ -359,6 +550,22 @@ export default function RebalanceContainer() {
 
                     try {
                       const data = await importB3({ file: f, noTesouro: false });
+                                            // ✅ guarda positions/prices
+                      const pos: RebalancePosition[] = (data.positions ?? []).map((p) => ({
+                        ticker: String(p.ticker).trim().toUpperCase(),
+                        asset_type: (String(p.asset_type).trim().toUpperCase() as "STOCK" | "FII" | "BOND"),
+                        quantity: Number(p.quantity),
+                        price: Number(p.price),
+                      }));
+
+                      setImportedPositions(pos);
+                      setImportedPrices(data.prices ?? {});
+
+                      // ✅ regra: arquivo => notas padrão 10 (pesos iguais)
+                      const notes: Record<string, number> = {};
+                      for (const p of pos) notes[p.ticker] = 10;
+                      setNotesByTicker(notes);
+
                       const wc = data.weights_current;
 
                       if (wc) {
@@ -427,10 +634,14 @@ export default function RebalanceContainer() {
                 <button
                 type="button"
                 onClick={() => {
-                    setFile(null);
-                    setImportSource(null);
-                    setSelectedDbId("");
+                setFile(null);
+                setImportSource(null);
+                setSelectedDbId("");
+                setImportedPositions([]);
+                setImportedPrices({});
+                setNotesByTicker({});
                 }}
+
                 className="ml-auto inline-flex items-center gap-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                 >
                 <X className="h-4 w-4" aria-hidden />
@@ -488,11 +699,128 @@ export default function RebalanceContainer() {
               </select>
             </div>
           </div>
+          {/* ✅ Notes by ticker (weights inside class) */}
+          {importedPositions.length > 0 && (
+            <div className="pt-2">
+              <div className="text-sm font-semibold text-[var(--text-primary)] mb-2">
+                {t("rebalance.notes.title")}
+              </div>
+
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] overflow-hidden">
+                <div className="max-h-64 overflow-y-auto overflow-x-hidden">
+
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 bg-[var(--surface-alt)] border-b border-[var(--border)]">
+                        <tr className="h-10 text-[var(--text-muted)]">
+
+                        <th className="text-left px-3 py-2 w-[140px]">{t("rebalance.notes.headers.ticker")}</th>
+                        <th className="text-center px-3 py-2 w-[70px]">{t("rebalance.notes.headers.type")}</th>
+                        <th className="text-right px-3 py-2 w-[80px]">{t("rebalance.notes.headers.qty")}</th>
+                        <th className="text-right px-3 py-2 w-[110px]">{t("rebalance.notes.headers.price")}</th>
+                        <th className="text-center px-3 py-2 w-[140px]">{t("rebalance.notes.headers.note")}</th>
+
+                    </tr>
+                    </thead>
+
+                    <tbody>
+                      {importedPositions
+                        .slice()
+                        .sort((a, b) => a.ticker.localeCompare(b.ticker))
+                        .map((p) => (
+                          <tr key={p.ticker} className="border-b border-[var(--border)] last:border-b-0">
+                            <td className="px-3 py-2 font-mono text-[var(--text-primary)]">{p.ticker}</td>
+                            <td className="px-3 py-2 align-middle">
+                            <div className="flex items-center justify-center">
+                                {(() => {
+                                const cls = asAssetClass(p.asset_type);
+                                return <Badge cls={cls} label={badgeLabel(cls)} />;
+                                })()}
+                            </div>
+                            </td>
+
+                            <td className="px-3 py-2 text-right text-[var(--text-primary)]">{fmtQty(p.quantity)}</td>
+                            <td className="px-3 py-2 text-right text-[var(--text-primary)]">
+                              {fmtMoney(importedPrices[p.ticker] ?? p.price ?? 0)}
+                            </td>
+<td className="px-3 py-2 text-center">
+  <div className="inline-flex items-center gap-1">
+    <button
+      type="button"
+      onClick={() => {
+        const tk = (p.ticker ?? "").toUpperCase();
+        setNotesByTicker((prev) => ({
+          ...prev,
+          [tk]: clampNote((prev[tk] ?? 10) - 1),
+        }));
+      }}
+      className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)]
+                 text-[var(--text-primary)] hover:bg-[var(--surface-alt)]"
+        aria-label={t("rebalance.notes.decreaseAria")}
+        title={t("rebalance.notes.decrease")}
+
+    >
+      <Minus size={14} />
+    </button>
+
+    <input
+      type="number"
+      min={0}
+      max={10}
+      step={1}
+      value={clampNote(notesByTicker[(p.ticker ?? "").toUpperCase()] ?? 10)}
+      onChange={(e) => {
+        const tk = (p.ticker ?? "").toUpperCase();
+        setNotesByTicker((prev) => ({
+          ...prev,
+          [tk]: clampNote(Number(e.target.value)),
+        }));
+      }}
+      className="w-14 h-8 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 text-sm text-center
+                 text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-[var(--primary)]/30
+                 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+    />
+
+    <button
+      type="button"
+      onClick={() => {
+        const tk = (p.ticker ?? "").toUpperCase();
+        setNotesByTicker((prev) => ({
+          ...prev,
+          [tk]: clampNote((prev[tk] ?? 10) + 1),
+        }));
+      }}
+      className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)]
+                 text-[var(--text-primary)] hover:bg-[var(--surface-alt)]"
+        aria-label={t("rebalance.notes.increaseAria")}
+        title={t("rebalance.notes.increase")}
+
+    >
+      <Plus size={14} />
+    </button>
+  </div>
+</td>
+
+
+
+
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="text-[10px] text-[var(--text-muted)] mt-2">
+                  {t("rebalance.notes.hint")}
+              </div>
+            </div>
+          )}
 
           <div className="flex items-center gap-3 pt-1">
             <button
               onClick={onRun}
-              disabled={!file || loading || !canSubmit}
+              disabled={loading || !canSubmit || (!file && importSource !== "db") || (importSource === "db" && importedPositions.length === 0)}
+
               className="inline-flex h-10 items-center gap-2 rounded-xl bg-[var(--primary)] px-4
                          text-sm font-semibold text-[var(--on-primary)]
                          hover:bg-[var(--primary-hover)] transition-colors

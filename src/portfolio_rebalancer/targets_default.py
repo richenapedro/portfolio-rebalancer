@@ -17,11 +17,22 @@ def build_weighted_targets(
     w_bond: float,
     *,
     include_tesouro: bool,
+    notes_by_ticker: dict[str, float] | None = None,
 ) -> dict[str, float]:
     """
-    - Pesos chegam em % (0..100)
-    - Divide o peso de cada classe igualmente entre os tickers daquela classe
-    - Se include_tesouro=False => BOND recebe 0 e é removido da normalização
+    Builds per-ticker target weights (sum ~= 1.0).
+
+    - Class weights arrive in % (0..100).
+    - Distributes each class weight across tickers of that class.
+      - Default: equal-weight within class.
+      - If notes_by_ticker is provided: proportional to note within class
+        (note<=0 => excluded from the allocation for that class).
+    - If include_tesouro=False => BOND receives 0 and is removed from normalization.
+
+    Note weighting (within each asset_type):
+      - Let S = sum(max(0, note[ticker])) over tickers with note>0.
+      - If S > 0: only tickers with note>0 participate with weight note/S.
+      - If S == 0: fallback to equal-weight over all tickers in that class.
     """
     weights_by_type = {
         "STOCK": max(0.0, float(w_stock)),
@@ -29,32 +40,81 @@ def build_weighted_targets(
         "BOND": max(0.0, float(w_bond)) if include_tesouro else 0.0,
     }
 
+    # Gather unique tickers per normalized asset_type
     tickers_by_type: dict[str, list[str]] = defaultdict(list)
     for p in positions:
         t = (p.ticker or "").strip().upper()
         if not t:
             continue
         at = _norm_type(p.asset_type)
+        if t not in tickers_by_type[at]:
+            tickers_by_type[at].append(t)
 
-        tickers_by_type[at].append(t)
+    def note_of(ticker: str) -> float:
+        if not notes_by_ticker:
+            return 10.0
+        v = notes_by_ticker.get(ticker)
+        if v is None:
+            v = notes_by_ticker.get(ticker.upper())
+        try:
+            n = float(v) if v is not None else 10.0
+        except Exception:
+            n = 10.0
+        if n < 0:
+            return 0.0
+        # not clamping to 10 on purpose; any positive scale works proportionally
+        return n
 
+    # For each type, compute eligible tickers and within-type weights
+    eligible_by_type: dict[str, list[str]] = {}
+    within_by_type: dict[str, dict[str, float]] = {}
+
+    for at, tickers in tickers_by_type.items():
+        uniq = sorted(set(tickers))
+        if not uniq:
+            continue
+
+        if notes_by_ticker:
+            scored = [(t, note_of(t)) for t in uniq]
+            pos = [(t, n) for (t, n) in scored if n > 0.0]
+            s = sum(n for _, n in pos)
+
+            if s > 0.0:
+                eligible = [t for (t, _) in pos]
+                within = {t: (n / s) for (t, n) in pos}
+            else:
+                eligible = uniq
+                within = {t: 1.0 / float(len(uniq)) for t in uniq}
+        else:
+            eligible = uniq
+            within = {t: 1.0 / float(len(uniq)) for t in uniq}
+
+        eligible_by_type[at] = eligible
+        within_by_type[at] = within
+
+    # Only types with positive class weight AND at least one eligible ticker participate
     active_types = [
-        k for k, v in weights_by_type.items() if v > 0 and tickers_by_type.get(k)
+        at for at, w in weights_by_type.items() if w > 0.0 and eligible_by_type.get(at)
     ]
     if not active_types:
-        # fallback: default equal por tipo/ticker
+        # fallback: default equal by type/ticker
         default = build_default_targets(positions, include_tesouro=include_tesouro)
         return dict(default.by_ticker.weights_by_ticker)
 
-    total_w = sum(weights_by_type[t] for t in active_types)
+    total_w = sum(weights_by_type[at] for at in active_types)
 
     out: dict[str, float] = {}
-    for t in active_types:
-        cls_w = weights_by_type[t] / total_w  # 0..1
-        tickers = sorted(set(tickers_by_type[t]))
-        per_ticker = cls_w / len(tickers)
-        for ticker in tickers:
-            out[ticker] = per_ticker
+    for at in active_types:
+        cls_w = weights_by_type[at] / total_w  # 0..1
+        within = within_by_type[at]
+        for ticker, w_in in within.items():
+            out[ticker] = out.get(ticker, 0.0) + (cls_w * w_in)
+
+    # numeric renorm
+    s = sum(out.values())
+    if out and abs(s - 1.0) > 1e-12:
+        for k in list(out.keys()):
+            out[k] = out[k] / s
 
     return out
 
