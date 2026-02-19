@@ -30,12 +30,13 @@ export type RebalanceResult = {
 };
 
 export type JobStatusResponse = {
-  request_id: string;
   job_id: string;
-  status: JobStatus;
-  result: RebalanceResult | null;
+  status: "queued" | "running" | "done" | "error";
+  result: unknown | null;   // ✅
   error: { code: string; message: string } | null;
+  request_id: string;
 };
+
 
 export type AllocationWeights = {
   stocks: number;
@@ -49,7 +50,9 @@ export async function createRebalanceB3Job(params: {
   mode: "BUY" | "SELL" | "TRADE";
   noTesouro: boolean;
   weights: AllocationWeights;
+  notesByTicker?: Record<string, number>; // ✅ novo
 }): Promise<JobCreateResponse> {
+
   const form = new FormData();
   form.append("file", params.file);
 
@@ -60,6 +63,10 @@ export async function createRebalanceB3Job(params: {
   form.append("w_stock", String(params.weights.stocks));
   form.append("w_fii", String(params.weights.fiis));
   form.append("w_bond", String(params.weights.bonds));
+  // ✅ notes_json: dict { TICKER: note }
+  if (params.notesByTicker && Object.keys(params.notesByTicker).length > 0) {
+    form.append("notes_json", JSON.stringify(params.notesByTicker));
+  }
 
   const r = await fetch(`${API_BASE}/api/rebalance/b3/jobs`, {
     method: "POST",
