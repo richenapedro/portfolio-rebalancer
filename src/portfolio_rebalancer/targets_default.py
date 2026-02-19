@@ -53,16 +53,24 @@ def build_weighted_targets(
     def note_of(ticker: str) -> float:
         if not notes_by_ticker:
             return 10.0
+
         v = notes_by_ticker.get(ticker)
         if v is None:
             v = notes_by_ticker.get(ticker.upper())
+
         try:
             n = float(v) if v is not None else 10.0
         except Exception:
             n = 10.0
+
+        if not (n == n):  # NaN
+            n = 10.0
+
+        # ✅ clamp 0..10
         if n < 0:
             return 0.0
-        # not clamping to 10 on purpose; any positive scale works proportionally
+        if n > 10:
+            return 10.0
         return n
 
     # For each type, compute eligible tickers and within-type weights

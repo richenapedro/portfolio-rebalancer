@@ -6,11 +6,52 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000"
 
 export type JobStatus = "queued" | "running" | "done" | "error";
 
+export type HoldingOut = {
+  ticker: string;
+  asset_type: string;
+  quantity: number;
+  price: number;
+  value: number;
+  weight: number;
+};
+
+export type TradeOut = {
+  side: "BUY" | "SELL";
+  ticker: string;
+  quantity: number;
+  price: number;
+  notional: number;
+};
+
+export type RebalanceResponse = {
+  request_id?: string | null;
+  summary: {
+    cash_before: number;
+    cash_after: number;
+    total_value_before: number;
+    total_value_after: number;
+    n_trades: number;
+  };
+  trades: TradeOut[];
+  holdings_before: HoldingOut[];
+  holdings_after: HoldingOut[];
+  warnings: string[];
+};
+
 export type JobCreateResponse = {
   request_id: string;
   job_id: string;
   status: JobStatus;
 };
+
+export type JobStatusResponse = {
+  job_id: string;
+  status: JobStatus;
+  result: RebalanceResponse | null; // ✅ alinhado
+  error: { code: string; message: string } | null;
+  request_id: string;
+};
+
 
 export type RebalanceResult = {
   summary: {

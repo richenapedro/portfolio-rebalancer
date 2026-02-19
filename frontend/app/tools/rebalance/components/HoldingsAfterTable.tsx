@@ -53,30 +53,41 @@ export default function HoldingsAfterTable(props: {
       <div
         ref={bodyRef}
         onScroll={() => syncScroll(props.syncId, "b")}
-        className="overflow-x-auto overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] h-[520px]"
+        className="overflow-x-hidden overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] h-[520px]"
       >
         <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-[var(--surface-alt)]">
-            <tr className="text-left border-b border-[var(--border)]">
-              <th className="py-2 pr-3">{props.labels.ticker}</th>
-              <th className="py-2 pr-3">{props.labels.action}</th>
-              <th className="py-2 pr-3">{props.labels.qty}</th>
-              <th className="py-2 pr-3">{props.labels.price}</th>
-              <th className="py-2 pr-3">{props.labels.value}</th>
+          <thead className="sticky top-0 bg-[var(--surface-alt)] border-b border-[var(--border)]">
+            <tr className="h-10 text-[var(--text-muted)]">
+              <th className="text-left pl-4 pr-3">{props.labels.ticker}</th>
+              <th className="text-center px-3">{props.labels.action}</th>
+              <th className="text-right px-3">{props.labels.qty}</th>
+              <th className="text-right px-3">{props.labels.price}</th>
+              <th className="text-right px-3">{props.labels.value}</th>
             </tr>
           </thead>
+
           <tbody>
             {props.rows.map((r) => (
               <tr key={r.ticker} className="border-b border-[var(--border)] last:border-b-0">
-                <td className="py-2 pr-3 font-mono text-[var(--text-primary)]">{r.ticker}</td>
-                <td className="py-2 pr-3">
+                <td className="pl-4 pr-3 py-2 font-mono text-[var(--text-primary)]">
+                  <div className="truncate" title={r.ticker}>
+                    {r.ticker}
+                  </div>
+                </td>
+
+                <td className="px-3 py-2 text-center">
                   <ActionBadge action={r.action} />
                 </td>
-                <td className="py-2 pr-3 font-mono text-[var(--text-primary)]">{props.fmtQty(r.after.quantity)}</td>
-                <td className="py-2 pr-3 font-mono text-[var(--text-primary)]">
+
+                <td className="px-3 py-2 font-mono text-right text-[var(--text-primary)]">
+                  {props.fmtQty(r.after.quantity)}
+                </td>
+
+                <td className="px-3 py-2 font-mono text-right text-[var(--text-primary)]">
                   {typeof r.after.price === "number" ? props.fmtMoney(r.after.price) : props.labels.dash}
                 </td>
-                <td className="py-2 pr-3 font-mono text-[var(--text-primary)]">
+
+                <td className="px-3 py-2 font-mono text-right text-[var(--text-primary)]">
                   {typeof r.after.value === "number" ? props.fmtMoney(r.after.value) : props.labels.dash}
                 </td>
               </tr>
@@ -92,6 +103,8 @@ export default function HoldingsAfterTable(props: {
           </tbody>
         </table>
       </div>
+
+
 
       <div className="mt-3">
         <AllocationBreakdownCard

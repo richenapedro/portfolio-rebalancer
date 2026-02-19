@@ -5,8 +5,7 @@ import { AllocationSliders, type AllocationWeights } from "../../components/Allo
 import { SummaryCards } from "../../components/SummaryCards";
 import { TradesTable } from "../../components/TradesTable";
 import { useI18n } from "@/i18n/I18nProvider";
-import { createRebalanceB3Job, getJob, type JobStatusResponse, importB3 } from "@/lib/api";
-
+import { createRebalanceB3Job, getJob, type JobStatusResponse, importB3, type RebalanceResponse } from "@/lib/api";
 import { BarChart3, Database, FileUp, Loader2, Minus, Play, Plus, SlidersHorizontal, Upload, Wallet, X } from "lucide-react";
 
 
@@ -130,15 +129,7 @@ function badgeLabel(cls: AssetClass): string {
       setLoadingDb(false);
     }
   }
-    function isRecord(x: unknown): x is Record<string, unknown> {
-    return typeof x === "object" && x !== null;
-    }
 
-    function readRequestId(x: unknown): string | null {
-    if (!isRecord(x)) return null;
-    const v = x["request_id"];
-    return typeof v === "string" ? v : null;
-    }
 
   async function importFromDbPortfolio(portfolioId: number) {
     // ✅ carrega as posições do DB (com note)
@@ -325,18 +316,19 @@ function badgeLabel(cls: AssetClass): string {
           throw new Error(`rebalance failed: ${r.status} ${txt}`);
         }
 
-        const resp: unknown = await r.json();
+        const resp = (await r.json()) as RebalanceResponse;
 
         // “fake job” local pra UI reaproveitar o renderer atual
-        const requestId = readRequestId(resp) ?? "local";
+      const requestId = resp.request_id ?? "local";
 
-        setJob({
-            job_id: "local",
-            status: "done",
-            result: resp,          // <- continua unknown, e seus readers já lidam com unknown
-            error: null,
-            request_id: requestId,
-        } satisfies JobStatusResponse);
+      setJob({
+        job_id: "local",
+        status: "done",
+        result: resp, // ✅ agora é RebalanceResponse
+        error: null,
+        request_id: requestId,
+      } satisfies JobStatusResponse);
+
 
 
         setLoading(false);
@@ -381,7 +373,7 @@ function badgeLabel(cls: AssetClass): string {
     };
   }, [jobId]);
 
-  const resultUnknown: unknown = job?.result ?? null;
+  const resultUnknown: RebalanceResponse | null = job?.result ?? null;
 
   const holdingsBefore = useMemo(() => readHoldingRows(resultUnknown, "holdings_before"), [resultUnknown]);
   const holdingsAfter = useMemo(() => readHoldingRows(resultUnknown, "holdings_after"), [resultUnknown]);
@@ -651,7 +643,7 @@ function badgeLabel(cls: AssetClass): string {
             </div>
 
 
-            <div className="text-xs text-[var(--text-muted)]">{t("rebalance.import.hint")}</div>
+            {/* <div className="text-xs text-[var(--text-muted)]">{t("rebalance.import.hint")}</div> */}
           </div>
 
           {/* Controls */}
@@ -811,7 +803,7 @@ function badgeLabel(cls: AssetClass): string {
               </div>
 
               <div className="text-[10px] text-[var(--text-muted)] mt-2">
-                  {t("rebalance.notes.hint")}
+                  {/* {t("rebalance.notes.hint")} */}
               </div>
             </div>
           )}

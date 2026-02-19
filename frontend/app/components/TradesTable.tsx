@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { RebalanceResult } from "@/lib/api";
+import { useI18n } from "@/i18n/I18nProvider";
 
 type Trade = RebalanceResult["trades"][number];
 type SideFilter = "ALL" | "BUY" | "SELL";
@@ -32,7 +33,7 @@ export function TradesTable(props: { trades: Trade[] }) {
   const [q, setQ] = useState("");
   const [side, setSide] = useState<SideFilter>("ALL");
   const [sort, setSort] = useState<SortMode>("notional_desc");
-
+  const { t } = useI18n();
   const filtered = useMemo(() => {
     const qq = q.trim().toUpperCase();
 
@@ -95,8 +96,8 @@ export function TradesTable(props: { trades: Trade[] }) {
                        text-[var(--text-primary)]
                        focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/40"
           >
-            <option value="notional_desc">Sort: Notional ↓</option>
-            <option value="ticker_asc">Sort: Ticker A→Z</option>
+            <option value="notional_desc">{t("rebalance.trades.sort.notionalDesc")}</option>
+            <option value="ticker_asc">{t("rebalance.trades.sort.tickerAsc")}</option>
           </select>
         </div>
       </div>

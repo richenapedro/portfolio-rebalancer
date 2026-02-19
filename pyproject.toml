@@ -36,6 +36,7 @@ src = ["src", "tests"]
 [tool.pytest.ini_options]
 filterwarnings = [
   "ignore:Workbook contains no default style, apply openpyxl's default:UserWarning:openpyxl.styles.stylesheet",
+  "ignore:datetime\\.datetime\\.utcnow\\(\\) is deprecated.*:DeprecationWarning:openpyxl\\..*",
 ]
 testpaths = ["tests"]
 pythonpath = ["src"]
