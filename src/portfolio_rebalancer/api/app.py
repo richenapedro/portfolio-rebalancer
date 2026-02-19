@@ -290,12 +290,29 @@ def _parse_notes_json(notes_json: str) -> dict[str, float] | None:
         raw = json.loads(notes_json)
         if not isinstance(raw, dict):
             return None
+
         out: dict[str, float] = {}
         for k, v in raw.items():
             kk = str(k).strip().upper()
             if not kk:
                 continue
-            out[kk] = float(v)
+
+            try:
+                n = float(v)
+            except Exception:
+                n = 10.0
+
+            if not (n == n):  # NaN
+                n = 10.0
+
+            # ✅ clamp 0..10
+            if n < 0:
+                n = 0.0
+            elif n > 10:
+                n = 10.0
+
+            out[kk] = n
+
         return out
     except Exception:
         return None

@@ -217,7 +217,12 @@ export type Dict = {
 
     trades: {
       title: string;
+      sort: {
+        notionalDesc: string;
+        tickerAsc: string;
+      };
     };
+
 
     common: {
       total: string;
@@ -476,7 +481,12 @@ export const en: Dict = {
 
     trades: {
       title: "Trades",
+      sort: {
+        notionalDesc: "Sort: Notional ↓",
+        tickerAsc: "Sort: Ticker A→Z",
+      },
     },
+
 
     common: {
       total: "Total",
@@ -735,7 +745,12 @@ export const ptBR: Dict = {
 
     trades: {
       title: "Trades",
+      sort: {
+        notionalDesc: "Ordenar: Notional ↓",
+        tickerAsc: "Ordenar: Ticker A→Z",
+      },
     },
+
 
     common: {
       total: "Total",
