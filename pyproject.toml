@@ -34,6 +34,9 @@ target-version = "py311"
 src = ["src", "tests"]
 
 [tool.pytest.ini_options]
+filterwarnings = [
+  "ignore:Workbook contains no default style, apply openpyxl's default:UserWarning:openpyxl.styles.stylesheet",
+]
 testpaths = ["tests"]
 pythonpath = ["src"]
 

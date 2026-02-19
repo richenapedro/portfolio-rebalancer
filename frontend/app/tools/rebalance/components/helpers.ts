@@ -88,3 +88,134 @@ export function allocationFromHoldings(rows: HoldingRow[]) {
 
   return { totals, total, pct };
 }
+// ===========================
+// Notes/Targets (Rebalancer)
+// ===========================
+
+export type DbPositionRow = {
+  ticker: string;
+  quantity: number;
+  price: number | null;
+  cls: string | null;
+  note: number | null;
+};
+
+export type RebalancePosition = {
+  ticker: string;
+  asset_type: "STOCK" | "FII" | "BOND";
+  quantity: number;
+  price: number;
+};
+
+// DB -> asset_type (mesma lógica do backend portfolio_db.py)
+export function dbRowToAssetType(ticker: string, cls: string | null | undefined): "STOCK" | "FII" | "BOND" {
+  const c = (cls ?? "").trim().toLowerCase();
+  const t = (ticker ?? "").trim().toUpperCase();
+
+  if (c === "fiis" || c === "fii") return "FII";
+  if (c === "bonds" || c === "bond" || c === "tesouro" || c === "rf") return "BOND";
+  if (c === "stocks" || c === "stock" || c === "acoes" || c === "ação" || c === "acoes") return "STOCK";
+
+  // fallback por ticker
+  if (t.endsWith("11")) return "FII";
+  if (t.startsWith("BRSTN")) return "BOND";
+  return "STOCK";
+}
+
+function normType(x: string): "STOCK" | "FII" | "BOND" | "OTHER" {
+  const s = (x ?? "").trim().toUpperCase();
+  if (["STOCK", "ACAO", "ACOES", "EQUITY", "BR_STOCK"].includes(s)) return "STOCK";
+  if (["FII", "FIIS", "REIT"].includes(s)) return "FII";
+  if (["BOND", "TESOURO", "TESOURO DIRETO", "RF", "RENDA FIXA"].includes(s)) return "BOND";
+  return "OTHER";
+}
+
+export function buildWeightedTargetsFE(args: {
+  positions: Array<{ ticker: string; asset_type: string }>;
+  w_stock: number;
+  w_fii: number;
+  w_bond: number;
+  include_tesouro: boolean;
+  notesByTicker?: Record<string, number>;
+}): Record<string, number> {
+  const { positions, notesByTicker } = args;
+
+  const weightsByType: Record<"STOCK" | "FII" | "BOND", number> = {
+    STOCK: Math.max(0, args.w_stock),
+    FII: Math.max(0, args.w_fii),
+    BOND: args.include_tesouro ? Math.max(0, args.w_bond) : 0,
+  };
+
+  // unique tickers by type
+  const tickersByType: Record<"STOCK" | "FII" | "BOND", string[]> = { STOCK: [], FII: [], BOND: [] };
+
+  for (const p of positions) {
+    const t = (p.ticker ?? "").trim().toUpperCase();
+    if (!t) continue;
+    const at = normType(p.asset_type);
+    if (at === "OTHER") continue;
+
+    const arr = tickersByType[at];
+    if (!arr.includes(t)) arr.push(t);
+  }
+
+  const noteOf = (t: string): number => {
+    if (!notesByTicker) return 10;
+    const v = notesByTicker[t] ?? notesByTicker[t.toUpperCase()];
+    const n = Number(v);
+    if (!Number.isFinite(n)) return 10;
+    if (n < 0) return 0;
+    return n;
+  };
+
+  const eligibleByType: Partial<Record<"STOCK" | "FII" | "BOND", string[]>> = {};
+  const withinByType: Partial<Record<"STOCK" | "FII" | "BOND", Record<string, number>>> = {};
+
+  (["STOCK", "FII", "BOND"] as const).forEach((at) => {
+    const uniq = Array.from(new Set(tickersByType[at])).sort();
+    if (!uniq.length) return;
+
+    if (notesByTicker) {
+      const scored = uniq.map((t) => [t, noteOf(t)] as const);
+      const pos = scored.filter(([, n]) => n > 0);
+      const s = pos.reduce((acc, [, n]) => acc + n, 0);
+
+      if (s > 0) {
+        eligibleByType[at] = pos.map(([t]) => t);
+        withinByType[at] = Object.fromEntries(pos.map(([t, n]) => [t, n / s]));
+      } else {
+        eligibleByType[at] = uniq;
+        withinByType[at] = Object.fromEntries(uniq.map((t) => [t, 1 / uniq.length]));
+      }
+    } else {
+      eligibleByType[at] = uniq;
+      withinByType[at] = Object.fromEntries(uniq.map((t) => [t, 1 / uniq.length]));
+    }
+  });
+
+  const activeTypes = (["STOCK", "FII", "BOND"] as const).filter(
+    (at) => weightsByType[at] > 0 && (eligibleByType[at]?.length ?? 0) > 0,
+  );
+
+  if (!activeTypes.length) return {};
+
+  const totalW = activeTypes.reduce((acc, at) => acc + weightsByType[at], 0);
+
+  const out: Record<string, number> = {};
+  for (const at of activeTypes) {
+    const clsW = weightsByType[at] / totalW;
+    const within = withinByType[at] ?? {};
+    for (const [ticker, wIn] of Object.entries(within)) {
+      out[ticker] = (out[ticker] ?? 0) + clsW * wIn;
+    }
+  }
+
+  // renorm
+  const s = Object.values(out).reduce((acc, v) => acc + v, 0);
+  if (s > 0 && Math.abs(s - 1) > 1e-12) {
+    for (const k of Object.keys(out)) out[k] /= s;
+  }
+
+  return out;
+}
+

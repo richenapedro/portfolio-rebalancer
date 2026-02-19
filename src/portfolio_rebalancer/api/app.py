@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import tempfile
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import (
@@ -8,9 +10,9 @@ from fastapi import (
     FastAPI,
     File,
     Form,
+    HTTPException,
     Request,
     UploadFile,
-    HTTPException,
 )
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,15 +23,12 @@ from portfolio_rebalancer.models import Portfolio, Position
 from portfolio_rebalancer.rebalance import rebalance
 from portfolio_rebalancer.targets import TargetAllocation
 from portfolio_rebalancer.targets_default import build_weighted_targets
-from .routers.bd_remote import router as bd_remote_router
-
-from .settings import PORTFOLIO_DB_PATH
-from .db.sqlite_db import init_db
-from .routers.portfolio_db import router as portfolio_db_router
-
-from .errors import validation_error_handler, value_error_handler
 from .jobs import create_job, get_job, set_done, set_error, set_running
+from .db.sqlite_db import init_db
+from .errors import validation_error_handler, value_error_handler
 from .middleware import request_id_middleware
+from .routers.bd_remote import router as bd_remote_router
+from .routers.portfolio_db import router as portfolio_db_router
 from .schemas import (
     HoldingOut,
     JobCreateResponse,
@@ -40,15 +39,23 @@ from .schemas import (
     RebalanceSummary,
     TradeOut,
 )
+from .settings import PORTFOLIO_DB_PATH
 
-app = FastAPI(title="portfolio-rebalancer API", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # substitui o antigo @app.on_event("startup")
+    init_db(PORTFOLIO_DB_PATH)
+    yield
+
+
+app = FastAPI(lifespan=lifespan, title="portfolio-rebalancer API", version="0.1.0")
 
 app.include_router(bd_remote_router)
 app.add_exception_handler(ValueError, value_error_handler)
 app.add_exception_handler(RequestValidationError, validation_error_handler)
 app.middleware("http")(request_id_middleware)
 
-# Dev: liberar Next.js local
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -59,11 +66,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-@app.on_event("startup")
-def _startup():
-    init_db(PORTFOLIO_DB_PATH)
 
 
 app.include_router(portfolio_db_router)
@@ -108,10 +110,6 @@ async def api_import(
     user_id: str = Form("default"),
     no_tesouro: bool = Form(False),
 ) -> dict[str, Any]:
-    """
-    Upload do XLSX da B3 (Posição).
-    Retorna positions, prices e targets (equal weight) em JSON.
-    """
     if not file.filename:
         raise ValueError("missing filename")
 
@@ -171,8 +169,6 @@ def _holdings_snapshot(
         rows.append((p, px, value))
 
     total_value = total_positions_value + float(cash)
-
-    # evita div/0
     denom = total_value if total_value > 0 else 1.0
 
     out: list[HoldingOut] = []
@@ -193,7 +189,6 @@ def _holdings_snapshot(
 
 
 def _rebalance_core(req: RebalanceRequest) -> RebalanceResponse:
-    # positions do request
     positions = [
         Position(
             ticker=p.ticker.strip().upper(),
@@ -206,7 +201,6 @@ def _rebalance_core(req: RebalanceRequest) -> RebalanceResponse:
 
     warnings = list(req.warnings or [])
 
-    # resolve prices por ticker (e fallback se faltar)
     prices: dict[str, float] = {}
     missing: set[str] = set()
 
@@ -227,16 +221,13 @@ def _rebalance_core(req: RebalanceRequest) -> RebalanceResponse:
             if t not in prices:
                 prices[t] = float(p.price)
 
-    # targets
     target_alloc = TargetAllocation(
         {k.strip().upper(): float(v) for k, v in req.targets.items()}
     )
 
     pf = Portfolio(positions=positions, cash=float(req.cash))
-
     holdings_before, total_before = _holdings_snapshot(pf.positions, pf.cash, prices)
 
-    # compute trades
     res = rebalance(
         pf,
         target_alloc,
@@ -292,6 +283,24 @@ def api_rebalance(req: RebalanceRequest, request: Request) -> RebalanceResponse:
     return resp
 
 
+def _parse_notes_json(notes_json: str) -> dict[str, float] | None:
+    if not notes_json:
+        return None
+    try:
+        raw = json.loads(notes_json)
+        if not isinstance(raw, dict):
+            return None
+        out: dict[str, float] = {}
+        for k, v in raw.items():
+            kk = str(k).strip().upper()
+            if not kk:
+                continue
+            out[kk] = float(v)
+        return out
+    except Exception:
+        return None
+
+
 @app.post("/api/rebalance/b3", response_model=RebalanceResponse)
 async def api_rebalance_b3(
     request: Request,
@@ -306,13 +315,8 @@ async def api_rebalance_b3(
     w_stock: float = Form(100.0),
     w_fii: float = Form(0.0),
     w_bond: float = Form(0.0),
+    notes_json: str = Form(""),
 ) -> RebalanceResponse:
-    """
-    1-call endpoint:
-    - Upload do XLSX da B3
-    - Gera targets equal-weight
-    - Executa rebalance e retorna o mesmo payload de /api/rebalance
-    """
     if not file.filename:
         raise ValueError("missing filename")
 
@@ -338,12 +342,16 @@ async def api_rebalance_b3(
     ]
 
     prices_json = {k.strip().upper(): float(v) for k, v in res.prices.items()}
+
+    notes_by_ticker = _parse_notes_json(str(notes_json or ""))
+
     targets_json = build_weighted_targets(
         res.positions,
         w_stock=w_stock,
         w_fii=w_fii,
         w_bond=w_bond,
         include_tesouro=not bool(no_tesouro),
+        notes_by_ticker=notes_by_ticker,
     )
 
     req = RebalanceRequest(
@@ -374,6 +382,7 @@ async def _run_rebalance_b3_job(
     w_stock: float,
     w_fii: float,
     w_bond: float,
+    notes_json: str,
 ) -> None:
     try:
         set_running(job_id)
@@ -399,12 +408,15 @@ async def _run_rebalance_b3_job(
         ]
 
         prices_json = {k.strip().upper(): float(v) for k, v in res.prices.items()}
+        notes_by_ticker = _parse_notes_json(str(notes_json or ""))
+
         targets_json = build_weighted_targets(
             res.positions,
             w_stock=w_stock,
             w_fii=w_fii,
             w_bond=w_bond,
             include_tesouro=not bool(no_tesouro),
+            notes_by_ticker=notes_by_ticker,
         )
 
         req = RebalanceRequest(
@@ -448,6 +460,7 @@ async def api_rebalance_b3_job_create(
     w_stock: float = Form(100.0),
     w_fii: float = Form(0.0),
     w_bond: float = Form(0.0),
+    notes_json: str = Form(""),
 ) -> JobCreateResponse:
     if not file.filename:
         raise ValueError("missing filename")
@@ -469,6 +482,7 @@ async def api_rebalance_b3_job_create(
         float(w_stock),
         float(w_fii),
         float(w_bond),
+        str(notes_json or ""),
     )
 
     return JobCreateResponse(
