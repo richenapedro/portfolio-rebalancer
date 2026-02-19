@@ -70,15 +70,6 @@ export type RebalanceResult = {
   }>;
 };
 
-export type JobStatusResponse = {
-  job_id: string;
-  status: "queued" | "running" | "done" | "error";
-  result: unknown | null;   // ✅
-  error: { code: string; message: string } | null;
-  request_id: string;
-};
-
-
 export type AllocationWeights = {
   stocks: number;
   fiis: number;
