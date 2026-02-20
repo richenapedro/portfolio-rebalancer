@@ -159,3 +159,6 @@ Thumbs.db
 
 # Test fixtures (se você realmente não quer versionar)
 tests/fixtures/
+
+compose.vps.yml
+
