@@ -15,7 +15,6 @@ from fastapi import HTTPException, Request
 from ..db.sqlite_db import get_user_by_id
 from ..settings import PORTFOLIO_DB_PATH
 
-
 # ------------------------ Password hashing (stdlib) ------------------------
 
 

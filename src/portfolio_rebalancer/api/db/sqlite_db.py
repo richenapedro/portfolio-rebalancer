@@ -38,8 +38,7 @@ def init_db(db_path: str) -> None:
     """
     with connect(db_path) as conn:
         # Base tables (as-is)
-        conn.executescript(
-            """
+        conn.executescript("""
             CREATE TABLE IF NOT EXISTS portfolio (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
@@ -69,12 +68,10 @@ def init_db(db_path: str) -> None:
 
             CREATE INDEX IF NOT EXISTS idx_position_portfolio ON position(portfolio_id);
             CREATE INDEX IF NOT EXISTS idx_import_run_portfolio ON import_run(portfolio_id);
-            """
-        )
+            """)
 
         # Users
-        conn.executescript(
-            """
+        conn.executescript("""
             CREATE TABLE IF NOT EXISTS user (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 email TEXT NOT NULL UNIQUE,
@@ -83,14 +80,15 @@ def init_db(db_path: str) -> None:
             );
 
             CREATE INDEX IF NOT EXISTS idx_user_email ON user(email);
-            """
-        )
+            """)
 
         # Migration: portfolio.user_id
         if not _has_column(conn, "portfolio", "user_id"):
             conn.execute("ALTER TABLE portfolio ADD COLUMN user_id INTEGER;")
             # existing portfolios (antes de auth) ficam sem owner e não aparecerão em prod
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_portfolio_user ON portfolio(user_id);")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_portfolio_user ON portfolio(user_id);"
+            )
 
 
 # ---------- Users ----------
@@ -157,7 +155,9 @@ def create_portfolio(db_path: str, user_id: int, name: str) -> dict[str, Any]:
         return {"id": pid, "name": name, "created_at": now}
 
 
-def get_portfolio(db_path: str, user_id: int, portfolio_id: int) -> dict[str, Any] | None:
+def get_portfolio(
+    db_path: str, user_id: int, portfolio_id: int
+) -> dict[str, Any] | None:
     with connect(db_path) as conn:
         row = conn.execute(
             """
@@ -170,7 +170,9 @@ def get_portfolio(db_path: str, user_id: int, portfolio_id: int) -> dict[str, An
         return dict(row) if row else None
 
 
-def rename_portfolio(db_path: str, user_id: int, portfolio_id: int, new_name: str) -> dict[str, Any] | None:
+def rename_portfolio(
+    db_path: str, user_id: int, portfolio_id: int, new_name: str
+) -> dict[str, Any] | None:
     with connect(db_path) as conn:
         cur = conn.execute(
             """
@@ -196,7 +198,9 @@ def delete_portfolio(db_path: str, user_id: int, portfolio_id: int) -> None:
 # ---------- Positions ----------
 
 
-def list_positions(db_path: str, user_id: int, portfolio_id: int) -> list[dict[str, Any]]:
+def list_positions(
+    db_path: str, user_id: int, portfolio_id: int
+) -> list[dict[str, Any]]:
     with connect(db_path) as conn:
         # ownership check
         ok = conn.execute(
@@ -269,7 +273,9 @@ def replace_positions(
 # ---------- Import runs ----------
 
 
-def list_import_runs(db_path: str, user_id: int, portfolio_id: int) -> list[dict[str, Any]]:
+def list_import_runs(
+    db_path: str, user_id: int, portfolio_id: int
+) -> list[dict[str, Any]]:
     with connect(db_path) as conn:
         ok = conn.execute(
             "SELECT 1 FROM portfolio WHERE id = ? AND user_id = ?",
@@ -290,7 +296,9 @@ def list_import_runs(db_path: str, user_id: int, portfolio_id: int) -> list[dict
         return [dict(r) for r in rows]
 
 
-def add_import_run(db_path: str, user_id: int, portfolio_id: int, filename: str) -> dict[str, Any]:
+def add_import_run(
+    db_path: str, user_id: int, portfolio_id: int, filename: str
+) -> dict[str, Any]:
     now = _utc_now_iso()
     with connect(db_path) as conn:
         ok = conn.execute(
@@ -305,4 +313,9 @@ def add_import_run(db_path: str, user_id: int, portfolio_id: int, filename: str)
             (portfolio_id, filename, now),
         )
         rid = int(cur.lastrowid)
-        return {"id": rid, "portfolio_id": portfolio_id, "filename": filename, "created_at": now}
+        return {
+            "id": rid,
+            "portfolio_id": portfolio_id,
+            "filename": filename,
+            "created_at": now,
+        }

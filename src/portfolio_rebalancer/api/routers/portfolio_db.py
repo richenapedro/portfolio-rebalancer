@@ -63,7 +63,9 @@ def portfolios_list(user: CurrentUser = Depends(get_current_user)):
 
 
 @router.post("/portfolios")
-def portfolios_create(body: PortfolioCreate, user: CurrentUser = Depends(get_current_user)):
+def portfolios_create(
+    body: PortfolioCreate, user: CurrentUser = Depends(get_current_user)
+):
     return create_portfolio(PORTFOLIO_DB_PATH, user.id, body.name)
 
 
@@ -77,7 +79,9 @@ def portfolios_get(portfolio_id: int, user: CurrentUser = Depends(get_current_us
 
 @router.put("/portfolios/{portfolio_id}")
 def portfolios_rename(
-    portfolio_id: int, body: PortfolioRename, user: CurrentUser = Depends(get_current_user)
+    portfolio_id: int,
+    body: PortfolioRename,
+    user: CurrentUser = Depends(get_current_user),
 ):
     p = rename_portfolio(PORTFOLIO_DB_PATH, user.id, portfolio_id, body.name)
     if not p:
@@ -95,7 +99,9 @@ def positions_list(portfolio_id: int, user: CurrentUser = Depends(get_current_us
 
 @router.post("/portfolios/{portfolio_id}/positions/replace")
 def positions_replace(
-    portfolio_id: int, body: ReplacePositionsBody, user: CurrentUser = Depends(get_current_user)
+    portfolio_id: int,
+    body: ReplacePositionsBody,
+    user: CurrentUser = Depends(get_current_user),
 ):
     p = get_portfolio(PORTFOLIO_DB_PATH, user.id, portfolio_id)
     if not p:
@@ -116,7 +122,9 @@ def import_runs_list(portfolio_id: int, user: CurrentUser = Depends(get_current_
 
 @router.post("/portfolios/{portfolio_id}/import_runs")
 def import_runs_add(
-    portfolio_id: int, body: ImportRunCreate, user: CurrentUser = Depends(get_current_user)
+    portfolio_id: int,
+    body: ImportRunCreate,
+    user: CurrentUser = Depends(get_current_user),
 ):
     p = get_portfolio(PORTFOLIO_DB_PATH, user.id, portfolio_id)
     if not p:
@@ -158,8 +166,22 @@ def export_b3_xlsx(portfolio_id: int, user: CurrentUser = Depends(get_current_us
     ws_fiis = wb.create_sheet("Fundo de Investimento")
     ws_td = wb.create_sheet("Tesouro Direto")
 
-    ws_acoes.append(["Código de Negociação", "Quantidade", "Preço de Fechamento", "Valor Atualizado"])
-    ws_fiis.append(["Código de Negociação", "Quantidade", "Preço de Fechamento", "Valor Atualizado"])
+    ws_acoes.append(
+        [
+            "Código de Negociação",
+            "Quantidade",
+            "Preço de Fechamento",
+            "Valor Atualizado",
+        ]
+    )
+    ws_fiis.append(
+        [
+            "Código de Negociação",
+            "Quantidade",
+            "Preço de Fechamento",
+            "Valor Atualizado",
+        ]
+    )
     ws_td.append(["Código ISIN", "Quantidade", "Valor Atualizado"])
 
     for r in rows:
