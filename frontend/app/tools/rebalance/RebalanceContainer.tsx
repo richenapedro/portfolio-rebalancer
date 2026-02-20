@@ -1,5 +1,5 @@
 "use client";
-
+import { useAuth } from "../../auth/AuthProvider"; // ajuste o path correto
 import { useEffect, useMemo, useState } from "react";
 import { AllocationSliders, type AllocationWeights } from "../../components/AllocationSliders";
 import { SummaryCards } from "../../components/SummaryCards";
@@ -51,9 +51,10 @@ function Badge(props: { cls: AssetClass; label: string }) {
     </span>
   );
 }
-
 export default function RebalanceContainer() {
   const { lang, t } = useI18n();
+  const { user } = useAuth(); // <- ADD
+  const isAuthed = !!user;    // <- ADD
   function clampNote(x: unknown): number {
   const n = Number(x);
   if (!Number.isFinite(n)) return 10;
@@ -115,7 +116,17 @@ function badgeLabel(cls: AssetClass): string {
   async function loadDbPortfolios() {
     try {
       setLoadingDb(true);
-      const r = await fetch(`${API_BASE}/api/db/portfolios`);
+      // find: fetch(`${API_BASE}/api/db/portfolios`)
+      const r = await fetch(`${API_BASE}/api/db/portfolios`, {
+        credentials: "include",
+        cache: "no-store",
+      });
+
+      if (r.status === 401) {
+        // ✅ deslogado: não seta erro, só limpa lista e sai
+        setDbPortfolios([]);
+        return;
+      }
       if (!r.ok) {
         const txt = await r.text().catch(() => "");
         throw new Error(`list portfolios failed: ${r.status} ${txt}`);
@@ -133,7 +144,13 @@ function badgeLabel(cls: AssetClass): string {
 
   async function importFromDbPortfolio(portfolioId: number) {
     // ✅ carrega as posições do DB (com note)
-    const r = await fetch(`${API_BASE}/api/db/portfolios/${portfolioId}/positions`);
+    if (!isAuthed) throw new Error("Not authenticated");
+    const r = await fetch(`${API_BASE}/api/db/portfolios/${portfolioId}/positions`, {
+      method: "GET",
+      headers: { accept: "application/json" },
+      cache: "no-store",
+      credentials: "include",
+    });
     if (!r.ok) {
       const txt = await r.text().catch(() => "");
       throw new Error(`list positions failed: ${r.status} ${txt}`);
@@ -205,9 +222,10 @@ function badgeLabel(cls: AssetClass): string {
 
 
   useEffect(() => {
+    if (!isAuthed) return; // <- ADD (evita spam 401)
+
     const safeReload = () => void loadDbPortfolios();
     safeReload();
-
     const onFocus = () => safeReload();
     const onVisibility = () => {
       if (document.visibilityState === "visible") safeReload();
@@ -219,7 +237,7 @@ function badgeLabel(cls: AssetClass): string {
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, []);
+  }, [isAuthed]);
 
   async function onRun() {
     if (!canSubmit) {
@@ -494,7 +512,7 @@ function badgeLabel(cls: AssetClass): string {
                     setErr(msg);
                   }
                 }}
-                disabled={loading || loadingDb}
+                disabled={loading || loadingDb || !isAuthed}
                 title={importSource === "file" ? t("rebalance.import.titleWhenFile") : t("rebalance.import.titleWhenDb")}
                 className={`w-full h-10 rounded-lg border border-[var(--border)] bg-[var(--surface-alt)]
                            px-3 text-sm text-[var(--text-primary)] outline-none
@@ -503,7 +521,7 @@ function badgeLabel(cls: AssetClass): string {
                 {importSource === "file" ? (
                   <option value="__file__">{t("rebalance.import.importedFromFile")}</option>
                 ) : (
-                  <option value="">{t("rebalance.import.selectDbPlaceholder")}</option>
+                  <option value="">{isAuthed ? t("rebalance.import.selectDbPlaceholder") : t("auth.loginRequired")}</option>
                 )}
 
                 {dbPortfolios.map((p) => (

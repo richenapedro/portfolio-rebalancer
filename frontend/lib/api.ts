@@ -1,4 +1,17 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
+const RAW_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
+
+// se vier "" (prod), usa a origem atual (https://app...)
+// se vier "http://127.0.0.1:8000" (dev), usa direto
+// se vier "/api" (evite), vira "https://app.../api"
+const ORIGIN =
+  typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
+
+const BASE =
+  RAW_BASE.startsWith("http")
+    ? RAW_BASE
+    : RAW_BASE.startsWith("/")
+      ? `${ORIGIN}${RAW_BASE}`
+      : ORIGIN;
 
 /** =======================
  * Jobs / Rebalance (já existia)
@@ -100,9 +113,10 @@ export async function createRebalanceB3Job(params: {
     form.append("notes_json", JSON.stringify(params.notesByTicker));
   }
 
-  const r = await fetch(`${API_BASE}/api/rebalance/b3/jobs`, {
+  const r = await fetch(`${BASE}/api/rebalance/b3/jobs`, {
     method: "POST",
     body: form,
+    credentials: "include",
   });
 
   if (!r.ok) {
@@ -114,7 +128,11 @@ export async function createRebalanceB3Job(params: {
 }
 
 export async function getJob(jobId: string): Promise<JobStatusResponse> {
-  const r = await fetch(`${API_BASE}/api/jobs/${jobId}`, { method: "GET" });
+  const r = await fetch(`${BASE}/api/jobs/${jobId}`, {
+    method: "GET",
+    credentials: "include",
+    cache: "no-store",
+  });
 
   if (!r.ok) {
     const txt = await r.text();
@@ -156,7 +174,7 @@ export async function importB3(params: { file: File; noTesouro: boolean }): Prom
   form.append("file", params.file);
   form.append("no_tesouro", String(params.noTesouro));
 
-  const r = await fetch(`${API_BASE}/api/import`, {
+  const r = await fetch(`${BASE}/api/import`, {
     method: "POST",
     body: form,
   });
@@ -174,7 +192,7 @@ export async function importB3(params: { file: File; noTesouro: boolean }): Prom
  * ======================= */
 
 export async function searchSymbols(q: string, limit = 8): Promise<string[]> {
-  const url = new URL("/api/bd_remote/symbols", API_BASE);
+  const url = new URL("/api/bd_remote/symbols", BASE);
   if (q) url.searchParams.set("q", q);
   url.searchParams.set("limit", String(limit));
 
@@ -189,7 +207,7 @@ export async function searchSymbols(q: string, limit = 8): Promise<string[]> {
 }
 
 export async function getRemotePrices(tickers: string[]): Promise<Record<string, number | null>> {
-  const url = new URL("/api/bd_remote/prices", API_BASE);
+  const url = new URL("/api/bd_remote/prices", BASE);
   url.searchParams.set("tickers", tickers.join(","));
 
   const r = await fetch(url.toString(), {
@@ -206,7 +224,7 @@ export async function getRemotePrices(tickers: string[]): Promise<Record<string,
   return (await r.json()) as Record<string, number | null>;
 }
 
-export type ApiAssetClass = "stocks" | "fiis" | "bonds" | "other";
+export type ApiAssetClass = "STOCK" | "FII" | "BOND" | "OTHER";
 
 export type RemoteAsset = {
   ticker: string;
@@ -215,7 +233,7 @@ export type RemoteAsset = {
 };
 
 export async function getRemoteAssets(): Promise<{ items: RemoteAsset[] }> {
-  const r = await fetch(`${API_BASE}/api/bd_remote/assets`, {
+  const r = await fetch(`${BASE}/api/bd_remote/assets`, {
     method: "GET",
     headers: { accept: "application/json" },
     cache: "no-store",
@@ -261,10 +279,11 @@ type CreatePortfolioResponse = {
 
 export async function savePortfolio(payload: SavePortfolioPayload): Promise<SavePortfolioResponse> {
   // 1) cria portfolio
-  const r1 = await fetch(`${API_BASE}/api/db/portfolios`, {
+  const r1 = await fetch(`${BASE}/api/db/portfolios`, {
     method: "POST",
     headers: { "content-type": "application/json", accept: "application/json" },
     body: JSON.stringify({ name: payload.name }),
+    credentials: "include",
   });
 
   if (!r1.ok) {
@@ -275,10 +294,11 @@ export async function savePortfolio(payload: SavePortfolioPayload): Promise<Save
   const created = (await r1.json()) as CreatePortfolioResponse;
 
   // 2) replace positions
-  const r2 = await fetch(`${API_BASE}/api/db/portfolios/${created.id}/positions/replace`, {
+  const r2 = await fetch(`${BASE}/api/db/portfolios/${created.id}/positions/replace`, {
     method: "POST",
     headers: { "content-type": "application/json", accept: "application/json" },
     body: JSON.stringify({ positions: payload.positions }),
+    credentials: "include",
   });
 
   if (!r2.ok) {
@@ -288,10 +308,11 @@ export async function savePortfolio(payload: SavePortfolioPayload): Promise<Save
 
   // 3) opcional: registrar import_run
   if (payload.import_filename) {
-    const r3 = await fetch(`${API_BASE}/api/db/portfolios/${created.id}/import_runs`, {
+    const r3 = await fetch(`${BASE}/api/db/portfolios/${created.id}/import_runs`, {
       method: "POST",
       headers: { "content-type": "application/json", accept: "application/json" },
       body: JSON.stringify({ filename: payload.import_filename }),
+      credentials: "include",
     });
 
     if (!r3.ok) {
@@ -301,4 +322,78 @@ export async function savePortfolio(payload: SavePortfolioPayload): Promise<Save
   }
 
   return { ok: true, portfolio_id: created.id };
+}
+
+/** =======================
+ * Auth
+ * ======================= */
+
+export type MeResponse = {
+  id: number;
+  email: string;
+  created_at?: string;
+};
+
+async function jsonOrText(r: Response) {
+  const ct = r.headers.get("content-type") ?? "";
+  if (ct.includes("application/json")) return (await r.json()) as unknown;
+  return await r.text();
+}
+
+// find: export async function authMe(): Promise<MeResponse> {
+export async function authMe(): Promise<MeResponse | null> {
+  const r = await fetch(`${BASE}/api/auth/me`, {
+    method: "GET",
+    headers: { accept: "application/json" },
+    credentials: "include",
+    cache: "no-store",
+  });
+
+  // ✅ deslogado -> não é erro
+  if (r.status === 401) return null;
+
+  if (!r.ok) {
+    throw new Error(`me failed: ${r.status}`);
+  }
+
+  return (await r.json()) as MeResponse;
+}
+
+export async function authLogin(email: string, password: string): Promise<MeResponse> {
+  const r = await fetch(`${BASE}/api/auth/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json" },
+    body: JSON.stringify({ email, password }),
+    credentials: "include",
+  });
+  if (!r.ok) {
+    const detail = await jsonOrText(r);
+    throw new Error(typeof detail === "string" ? detail : `login failed: ${r.status}`);
+  }
+  return (await r.json()) as MeResponse;
+}
+
+export async function authSignup(email: string, password: string): Promise<MeResponse> {
+  const r = await fetch(`${BASE}/api/auth/signup`, {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json" },
+    body: JSON.stringify({ email, password }),
+    credentials: "include",
+  });
+  if (!r.ok) {
+    const detail = await jsonOrText(r);
+    throw new Error(typeof detail === "string" ? detail : `signup failed: ${r.status}`);
+  }
+  return (await r.json()) as MeResponse;
+}
+
+export async function authLogout(): Promise<void> {
+  const r = await fetch(`${BASE}/api/auth/logout`, {
+    method: "POST",
+    headers: { accept: "application/json" },
+    credentials: "include",
+  });
+  if (!r.ok) {
+    throw new Error(`logout failed: ${r.status}`);
+  }
 }

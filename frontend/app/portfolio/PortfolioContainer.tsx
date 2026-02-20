@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   Plus,
   Trash2,
@@ -29,6 +30,7 @@ import {
   type ApiAssetClass,
 } from "@/lib/api";
 import { useI18n } from "@/i18n/I18nProvider";
+import { useAuth } from "../auth/AuthProvider";
 
 import ConfirmDialog from "./components/ConfirmDialog";
 import PortfolioFilters, {
@@ -57,8 +59,7 @@ type PickedAsset = {
 
 /* ------------------------- DB endpoints (portfolios) ------------------------ */
 
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 
 type DbPortfolio = { id: number; name: string };
 type DbPositionRow = {
@@ -71,7 +72,7 @@ type DbPositionRow = {
 };
 
 async function dbListPortfolios(): Promise<DbPortfolio[]> {
-  const r = await fetch(`${API_BASE}/api/db/portfolios`, { cache: "no-store" });
+  const r = await fetch(`${API_BASE}/api/db/portfolios`, { cache: "no-store", credentials: "include" });
   if (!r.ok) {
     const txt = await r.text().catch(() => "");
     throw new Error(`list portfolios failed: ${r.status} ${txt}`);
@@ -83,6 +84,7 @@ async function dbListPortfolios(): Promise<DbPortfolio[]> {
 async function dbGetPositions(portfolioId: number): Promise<DbPositionRow[]> {
   const r = await fetch(`${API_BASE}/api/db/portfolios/${portfolioId}/positions`, {
     cache: "no-store",
+    credentials: "include",
   });
   if (!r.ok) {
     const txt = await r.text().catch(() => "");
@@ -100,6 +102,7 @@ async function dbRenamePortfolio(
     method: "PUT",
     headers: { "content-type": "application/json", accept: "application/json" },
     body: JSON.stringify({ name }),
+    credentials: "include",
   });
   if (!r.ok) {
     const txt = await r.text().catch(() => "");
@@ -114,6 +117,7 @@ async function dbCreatePortfolio(
     method: "POST",
     headers: { "content-type": "application/json", accept: "application/json" },
     body: JSON.stringify({ name }),
+    credentials: "include",
   });
   if (!r.ok) {
     const txt = await r.text().catch(() => "");
@@ -139,6 +143,7 @@ async function dbReplacePositions(
       method: "POST",
       headers: { "content-type": "application/json", accept: "application/json" },
       body: JSON.stringify({ positions }),
+      credentials: "include",
     },
   );
   if (!r.ok) {
@@ -151,6 +156,7 @@ async function dbDeletePortfolio(portfolioId: number): Promise<void> {
   const r = await fetch(`${API_BASE}/api/db/portfolios/${portfolioId}`, {
     method: "DELETE",
     headers: { accept: "application/json" },
+    credentials: "include",
   });
   if (!r.ok) {
     const txt = await r.text().catch(() => "");
@@ -208,7 +214,16 @@ function clampNote(v: number) {
 }
 
 function toApiAssetClass(cls: AssetClass): ApiAssetClass {
-  return cls;
+  switch (cls) {
+    case "stocks":
+      return "STOCK";
+    case "fiis":
+      return "FII";
+    case "bonds":
+      return "BOND";
+    default:
+      return "OTHER";
+  }
 }
 
 function toAssetClass(v: unknown): AssetClass {
@@ -243,6 +258,8 @@ function StatCard(props: {
 
 export default function PortfolioContainer() {
   const { lang, t } = useI18n();
+  const { user } = useAuth();
+  const canDb = !!user;
 
   const fmtMoney = useCallback(
     (n: number) =>
@@ -329,6 +346,11 @@ export default function PortfolioContainer() {
   }
 
   const refreshDbPortfolios = useCallback(async () => {
+    if (!canDb) {
+      setDbPortfolios([]);
+      setDbLoading(false);
+      return;
+    }
     try {
       setDbLoading(true);
       const items = await dbListPortfolios();
@@ -339,7 +361,7 @@ export default function PortfolioContainer() {
     } finally {
       setDbLoading(false);
     }
-  }, []);
+  }, [canDb]);
 
   // (1) carrega ao abrir a página
   useEffect(() => {
@@ -794,21 +816,22 @@ export default function PortfolioContainer() {
     setError(null);
     setSaveMsg(null);
 
+    if (!canDb) {
+      setError(t("portfolio.auth.disabledSaveHint"));
+      return;
+    }
+
     const name = portfolioName.trim();
     if (!name) {
-      setError(lang === "pt-BR" ? "Digite um nome para a carteira." : "Enter a portfolio name.");
+      setError(t("portfolio.toast.saveNeedName"));
       return;
     }
     if (nameTakenByOther) {
-      setError(
-        lang === "pt-BR"
-          ? "Já existe uma carteira com esse nome. Escolha outro nome."
-          : "A portfolio with this name already exists. Choose another name.",
-      );
+      setError(t("portfolio.toast.saveNameTaken"));
       return;
     }
     if (holdings.length === 0) {
-      setError(lang === "pt-BR" ? "Nada para salvar: a carteira está vazia." : "Nothing to save: the portfolio is empty.");
+      setError(t("portfolio.toast.saveEmpty"));
       return;
     }
 
@@ -837,8 +860,8 @@ export default function PortfolioContainer() {
         await refreshDbPortfolios();
       }
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : lang === "pt-BR" ? "Falha ao salvar no banco." : "Failed to save to DB.";
-      setError(msg);
+      const msg = e instanceof Error ? e.message : t("portfolio.toast.saveFailed");
+      setError(msg || t("portfolio.toast.saveFailed"));
     } finally {
       setSaveLoading(false);
     }
@@ -848,8 +871,13 @@ export default function PortfolioContainer() {
     setError(null);
     setSaveMsg(null);
 
+    if (!canDb) {
+      setError(t("portfolio.auth.disabledDbHint"));
+      return;
+    }
+
     if (selectedPortfolioId === "") {
-      setError(lang === "pt-BR" ? "Selecione uma carteira do banco para excluir." : "Select a portfolio from the DB to delete.");
+      setError(t("portfolio.toast.deleteNeedSelect"));
       return;
     }
 
@@ -935,6 +963,22 @@ export default function PortfolioContainer() {
         </h1>
       </div>
 
+      {!canDb ? (
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-[var(--text-primary)]">{t("portfolio.auth.bannerTitle")}</div>
+            <div className="mt-1 text-sm text-[var(--text-muted)]">{t("portfolio.auth.bannerDesc")}</div>
+          </div>
+          <Link
+            href="/login?next=/portfolio"
+            className="shrink-0 inline-flex items-center justify-center rounded-xl bg-[var(--primary)] px-4 py-2
+                       text-sm font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)]"
+          >
+            {t("portfolio.auth.loginCta")}
+          </Link>
+        </div>
+      ) : null}
+
       {/* TOP ROW */}
       <section className="grid grid-cols-1 lg:grid-cols-5 gap-4 items-stretch">
         <div className="lg:col-span-3">
@@ -963,17 +1007,17 @@ export default function PortfolioContainer() {
                   <button
                     type="button"
                     onClick={() => setConfirmDeleteOpen(true)}
-                    disabled={saveLoading || selectedPortfolioId === ""}
+                    disabled={saveLoading || selectedPortfolioId === "" || !canDb}
                     className="h-10 inline-flex items-center justify-center gap-2 rounded-xl
                               border border-[color:var(--sell)]/40 bg-[var(--surface)] px-4 text-sm font-semibold
                               text-[color:var(--sell)] hover:bg-[color:var(--sell)]/10
                               disabled:opacity-60 disabled:cursor-not-allowed"
                     title={
-                      selectedPortfolioId === ""
-                        ? lang === "pt-BR"
-                          ? "Selecione uma carteira do banco"
-                          : "Select a DB portfolio"
-                        : t("common.delete")
+                      !canDb
+                        ? t("portfolio.auth.disabledDbHint")
+                        : selectedPortfolioId === ""
+                          ? t("portfolio.misc.selectDbPortfolio")
+                          : t("common.delete")
                     }
                   >
                     <Trash2 className="h-4 w-4 shrink-0" />
@@ -986,11 +1030,12 @@ export default function PortfolioContainer() {
                 <select
                   value={selectedPortfolioId}
                   onChange={async (e) => {
+                    if (!canDb) return;
                     const v = e.target.value ? Number(e.target.value) : "";
                     setSelectedPortfolioId(v);
                     if (v !== "") await loadFromDb(v);
                   }}
-                  disabled={dbLoading}
+                  disabled={dbLoading || !canDb}
                   className="w-full h-10 rounded-xl border border-[var(--border)] bg-[var(--surface-alt)]
                             px-3 text-sm text-[var(--text-primary)] outline-none
                             disabled:opacity-60 disabled:cursor-not-allowed"
@@ -1006,6 +1051,12 @@ export default function PortfolioContainer() {
                 {dbLoading ? (
                   <div className="mt-2 text-xs text-[var(--text-muted)]">
                     {t("portfolio.db.updating")}
+                  </div>
+                ) : null}
+
+                {!canDb ? (
+                  <div className="mt-2 text-xs text-[var(--text-muted)]">
+                    {t("portfolio.auth.disabledDbHint")}
                   </div>
                 ) : null}
               </div>
@@ -1346,12 +1397,13 @@ export default function PortfolioContainer() {
           <button
             type="button"
             onClick={onSaveToDb}
-            disabled={saveLoading || nameTakenByOther}
+            disabled={saveLoading || nameTakenByOther || !canDb}
             className="w-full inline-flex items-center justify-center gap-2 rounded-2xl
                       bg-[var(--primary)] text-[var(--on-primary)]
                       px-4 py-3 text-sm font-semibold
                       hover:bg-[var(--primary-hover)]
                       disabled:opacity-60 disabled:cursor-not-allowed"
+            title={!canDb ? t("portfolio.auth.disabledSaveHint") : undefined}
           >
             <Save className="h-5 w-5 shrink-0" />
             {saveLoading
@@ -1360,6 +1412,12 @@ export default function PortfolioContainer() {
                 ? t("portfolio.save.create")
                 : t("portfolio.save.update")}
           </button>
+
+          {!canDb ? (
+            <div className="text-xs text-[var(--text-muted)] text-center">
+              {t("portfolio.auth.disabledSaveHint")}
+            </div>
+          ) : null}
         </div>
       </section>
 

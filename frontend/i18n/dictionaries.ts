@@ -11,6 +11,29 @@ export type Dict = {
     auth: { login: string; signup: string };
   };
 
+  auth: {
+    logout: string;
+    fields: { email: string; password: string };
+    placeholders: { email: string; password: string };
+    aria: { showPassword: string; hidePassword: string };
+    errors: { generic: string };
+    login: {
+      title: string;
+      subtitle: string;
+      submit: string;
+      noAccount: string;
+      cta: string;
+    };
+    signup: {
+      title: string;
+      subtitle: string;
+      submit: string;
+      haveAccount: string;
+      cta: string;
+      passwordHint: string;
+    };
+  };
+
   common: {
     cancel: string;
     confirm: string;
@@ -128,6 +151,14 @@ export type Dict = {
       clearDesc: string;
       deleteTitle: string;
       deleteDesc: string;
+    };
+
+    auth: {
+      bannerTitle: string;
+      bannerDesc: string;
+      loginCta: string;
+      disabledSaveHint: string;
+      disabledDbHint: string;
     };
   };
 
@@ -275,6 +306,29 @@ export const en: Dict = {
     auth: { login: "Log in", signup: "Create account" },
   },
 
+  auth: {
+    logout: "Log out",
+    fields: { email: "E-mail", password: "Password" },
+    placeholders: { email: "you@example.com", password: "••••••••" },
+    aria: { showPassword: "Show password", hidePassword: "Hide password" },
+    errors: { generic: "Authentication failed." },
+    login: {
+      title: "Log in",
+      subtitle: "Use the same e-mail/password you used to sign up.",
+      submit: "Log in",
+      noAccount: "No account?",
+      cta: "Create account",
+    },
+    signup: {
+      title: "Create account",
+      subtitle: "Create an account to keep your portfolios private.",
+      submit: "Create account",
+      haveAccount: "Already have an account?",
+      cta: "Log in",
+      passwordHint: "Password must have at least {min} characters.",
+    },
+  },
+
   common: {
     cancel: "Cancel",
     confirm: "Confirm",
@@ -392,6 +446,15 @@ export const en: Dict = {
       clearDesc: "This clears the current screen edit. It does not delete the portfolio from the database.",
       deleteTitle: "Delete portfolio from database?",
       deleteDesc: "This removes the portfolio and all positions/import_runs from the database. It cannot be undone.",
+    },
+
+    auth: {
+      bannerTitle: "Private portfolios",
+      bannerDesc:
+        "You can view and import normally, but saving/updating portfolios in the database requires login.",
+      loginCta: "Log in",
+      disabledSaveHint: "Log in to save/update in the database.",
+      disabledDbHint: "Log in to access portfolios saved in the database.",
     },
   },
 
@@ -539,6 +602,29 @@ export const ptBR: Dict = {
     auth: { login: "Entrar", signup: "Criar conta" },
   },
 
+  auth: {
+    logout: "Sair",
+    fields: { email: "E-mail", password: "Senha" },
+    placeholders: { email: "voce@exemplo.com", password: "••••••••" },
+    aria: { showPassword: "Mostrar senha", hidePassword: "Ocultar senha" },
+    errors: { generic: "Falha na autenticação." },
+    login: {
+      title: "Entrar",
+      subtitle: "Use o mesmo e-mail/senha que você cadastrou.",
+      submit: "Entrar",
+      noAccount: "Ainda não tem conta?",
+      cta: "Criar conta",
+    },
+    signup: {
+      title: "Criar conta",
+      subtitle: "Crie uma conta para manter suas carteiras privadas.",
+      submit: "Criar conta",
+      haveAccount: "Já tem conta?",
+      cta: "Entrar",
+      passwordHint: "A senha deve ter pelo menos {min} caracteres.",
+    },
+  },
+
   common: {
     cancel: "Cancelar",
     confirm: "Confirmar",
@@ -656,6 +742,15 @@ export const ptBR: Dict = {
       clearDesc: "Isso limpa a edição atual (tela). Não exclui a carteira do banco.",
       deleteTitle: "Excluir carteira do banco?",
       deleteDesc: "Essa ação remove a carteira e todas as posições/import_runs no banco. Não pode ser desfeita.",
+    },
+
+    auth: {
+      bannerTitle: "Carteiras privadas",
+      bannerDesc:
+        "Você pode visualizar e importar normalmente, mas salvar/atualizar no banco exige login.",
+      loginCta: "Entrar",
+      disabledSaveHint: "Faça login para salvar/atualizar no banco.",
+      disabledDbHint: "Faça login para acessar carteiras salvas no banco.",
     },
   },
 

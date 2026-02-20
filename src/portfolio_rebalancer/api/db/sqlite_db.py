@@ -5,7 +5,7 @@ import os
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Iterable
 
 
 def _utc_now_iso() -> str:
@@ -25,8 +25,19 @@ def connect(db_path: str):
         conn.close()
 
 
+def _has_column(conn: sqlite3.Connection, table: str, column: str) -> bool:
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return any(r["name"] == column for r in rows)
+
+
 def init_db(db_path: str) -> None:
+    """Cria/migra o schema do SQLite.
+
+    - Adiciona tabela de usuários.
+    - Adiciona coluna portfolio.user_id (migração leve via ALTER TABLE).
+    """
     with connect(db_path) as conn:
+        # Base tables (as-is)
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS portfolio (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -59,67 +70,149 @@ def init_db(db_path: str) -> None:
             CREATE INDEX IF NOT EXISTS idx_import_run_portfolio ON import_run(portfolio_id);
             """)
 
+        # Users
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS user (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
 
-# ---------- Portfolio CRUD ----------
+            CREATE INDEX IF NOT EXISTS idx_user_email ON user(email);
+            """)
+
+        # Migration: portfolio.user_id
+        if not _has_column(conn, "portfolio", "user_id"):
+            conn.execute("ALTER TABLE portfolio ADD COLUMN user_id INTEGER;")
+            # existing portfolios (antes de auth) ficam sem owner e não aparecerão em prod
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_portfolio_user ON portfolio(user_id);"
+            )
 
 
-def list_portfolios(db_path: str) -> list[dict[str, Any]]:
+# ---------- Users ----------
+
+
+def create_user(db_path: str, email: str, password_hash: str) -> dict[str, Any]:
+    now = _utc_now_iso()
+    with connect(db_path) as conn:
+        try:
+            cur = conn.execute(
+                "INSERT INTO user (email, password_hash, created_at) VALUES (?, ?, ?)",
+                (email.strip().lower(), password_hash, now),
+            )
+        except sqlite3.IntegrityError as e:
+            raise ValueError("E-mail já cadastrado.") from e
+
+        user_id = int(cur.lastrowid)
+        return {"id": user_id, "email": email.strip().lower(), "created_at": now}
+
+
+def get_user_by_email(db_path: str, email: str) -> dict[str, Any] | None:
+    with connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT id, email, password_hash, created_at FROM user WHERE email = ?",
+            (email.strip().lower(),),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def get_user_by_id(db_path: str, user_id: int) -> dict[str, Any] | None:
+    with connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT id, email, password_hash, created_at FROM user WHERE id = ?",
+            (user_id,),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+# ---------- Portfolio CRUD (multi-tenant) ----------
+
+
+def list_portfolios(db_path: str, user_id: int) -> list[dict[str, Any]]:
     with connect(db_path) as conn:
         rows = conn.execute(
-            "SELECT id, name, created_at FROM portfolio ORDER BY id DESC"
+            """
+            SELECT id, name, created_at
+            FROM portfolio
+            WHERE user_id = ?
+            ORDER BY id DESC
+            """,
+            (user_id,),
         ).fetchall()
         return [dict(r) for r in rows]
 
 
-def create_portfolio(db_path: str, name: str) -> dict[str, Any]:
+def create_portfolio(db_path: str, user_id: int, name: str) -> dict[str, Any]:
     now = _utc_now_iso()
     with connect(db_path) as conn:
         cur = conn.execute(
-            "INSERT INTO portfolio(name, created_at) VALUES (?, ?)",
-            (name.strip(), now),
+            "INSERT INTO portfolio (name, created_at, user_id) VALUES (?, ?, ?)",
+            (name, now, user_id),
         )
-        pid = cur.lastrowid
-        row = conn.execute(
-            "SELECT id, name, created_at FROM portfolio WHERE id = ?",
-            (pid,),
-        ).fetchone()
-        if not row:
-            raise RuntimeError("Falha ao criar portfolio.")
-        return dict(row)
+        pid = int(cur.lastrowid)
+        return {"id": pid, "name": name, "created_at": now}
 
 
-def get_portfolio(db_path: str, portfolio_id: int) -> dict[str, Any] | None:
+def get_portfolio(
+    db_path: str, user_id: int, portfolio_id: int
+) -> dict[str, Any] | None:
     with connect(db_path) as conn:
         row = conn.execute(
-            "SELECT id, name, created_at FROM portfolio WHERE id = ?",
-            (portfolio_id,),
+            """
+            SELECT id, name, created_at
+            FROM portfolio
+            WHERE id = ? AND user_id = ?
+            """,
+            (portfolio_id, user_id),
         ).fetchone()
         return dict(row) if row else None
 
 
 def rename_portfolio(
-    db_path: str, portfolio_id: int, name: str
+    db_path: str, user_id: int, portfolio_id: int, new_name: str
 ) -> dict[str, Any] | None:
     with connect(db_path) as conn:
-        conn.execute(
-            "UPDATE portfolio SET name = ? WHERE id = ?",
-            (name.strip(), portfolio_id),
+        cur = conn.execute(
+            """
+            UPDATE portfolio
+            SET name = ?
+            WHERE id = ? AND user_id = ?
+            """,
+            (new_name, portfolio_id, user_id),
         )
-        row = conn.execute(
-            "SELECT id, name, created_at FROM portfolio WHERE id = ?",
-            (portfolio_id,),
-        ).fetchone()
-        return dict(row) if row else None
+        if cur.rowcount == 0:
+            return None
+        return {"id": portfolio_id, "name": new_name}
+
+
+def delete_portfolio(db_path: str, user_id: int, portfolio_id: int) -> None:
+    with connect(db_path) as conn:
+        conn.execute(
+            "DELETE FROM portfolio WHERE id = ? AND user_id = ?",
+            (portfolio_id, user_id),
+        )
 
 
 # ---------- Positions ----------
 
 
-def list_positions(db_path: str, portfolio_id: int) -> list[dict[str, Any]]:
+def list_positions(
+    db_path: str, user_id: int, portfolio_id: int
+) -> list[dict[str, Any]]:
     with connect(db_path) as conn:
+        # ownership check
+        ok = conn.execute(
+            "SELECT 1 FROM portfolio WHERE id = ? AND user_id = ?",
+            (portfolio_id, user_id),
+        ).fetchone()
+        if not ok:
+            return []
+
         rows = conn.execute(
             """
-            SELECT portfolio_id, ticker, quantity, price, cls, note, source, updated_at
+            SELECT ticker, quantity, price, cls, note, source, updated_at
             FROM position
             WHERE portfolio_id = ?
             ORDER BY ticker ASC
@@ -130,97 +223,67 @@ def list_positions(db_path: str, portfolio_id: int) -> list[dict[str, Any]]:
 
 
 def replace_positions(
-    db_path: str, portfolio_id: int, positions: list[dict[str, Any]]
+    db_path: str,
+    user_id: int,
+    portfolio_id: int,
+    positions: Iterable[dict[str, Any]],
 ) -> None:
-    """
-    Substitui 100% das posições do portfolio (estado final).
-    - remove tudo e insere o que veio.
-    """
     now = _utc_now_iso()
-
-    normalized: list[tuple[Any, ...]] = []
-    for p in positions:
-        ticker = str(p.get("ticker") or "").strip().upper()
-        if not ticker:
-            continue
-
-        quantity = p.get("quantity")
-        if quantity is None:
-            continue
-        try:
-            quantity_f = float(quantity)
-        except Exception:
-            continue
-
-        price = p.get("price", None)
-        if price is not None:
-            try:
-                price = float(price)
-            except Exception:
-                price = None
-
-        cls = p.get("cls", None)
-        cls = str(cls).strip().lower() if cls is not None and str(cls).strip() else None
-
-        note = p.get("note", None)
-        if note is not None:
-            try:
-                note_i = int(note)
-            except Exception:
-                note_i = None
-        else:
-            note_i = None
-
-        # ✅ clamp 0..10
-        if note_i is not None:
-            if note_i < 0:
-                note_i = 0
-            elif note_i > 10:
-                note_i = 10
-
-        source = str(p.get("source") or "manual").strip().lower()
-        if source not in {"import", "manual"}:
-            source = "manual"
-
-        normalized.append(
-            (portfolio_id, ticker, quantity_f, price, cls, note_i, source, now)
-        )
-
     with connect(db_path) as conn:
+        # ownership check
+        ok = conn.execute(
+            "SELECT 1 FROM portfolio WHERE id = ? AND user_id = ?",
+            (portfolio_id, user_id),
+        ).fetchone()
+        if not ok:
+            raise ValueError("Portfolio não encontrado.")
+
         conn.execute("DELETE FROM position WHERE portfolio_id = ?", (portfolio_id,))
-        if normalized:
+
+        rows_to_insert: list[tuple[Any, ...]] = []
+        for p in positions:
+            ticker = str(p.get("ticker") or "").strip().upper()
+            if not ticker:
+                continue
+            rows_to_insert.append(
+                (
+                    portfolio_id,
+                    ticker,
+                    float(p.get("quantity") or 0.0),
+                    p.get("price"),
+                    p.get("cls"),
+                    p.get("note"),
+                    str(p.get("source") or "manual"),
+                    now,
+                )
+            )
+
+        if rows_to_insert:
             conn.executemany(
                 """
-                INSERT INTO position(
+                INSERT INTO position (
                     portfolio_id, ticker, quantity, price, cls, note, source, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                normalized,
+                rows_to_insert,
             )
 
 
-# ---------- Import run (opcional) ----------
+# ---------- Import runs ----------
 
 
-def add_import_run(db_path: str, portfolio_id: int, filename: str) -> dict[str, Any]:
-    now = _utc_now_iso()
+def list_import_runs(
+    db_path: str, user_id: int, portfolio_id: int
+) -> list[dict[str, Any]]:
     with connect(db_path) as conn:
-        cur = conn.execute(
-            "INSERT INTO import_run(portfolio_id, filename, created_at) VALUES (?, ?, ?)",
-            (portfolio_id, filename.strip(), now),
-        )
-        rid = cur.lastrowid
-        row = conn.execute(
-            "SELECT id, portfolio_id, filename, created_at FROM import_run WHERE id = ?",
-            (rid,),
+        ok = conn.execute(
+            "SELECT 1 FROM portfolio WHERE id = ? AND user_id = ?",
+            (portfolio_id, user_id),
         ).fetchone()
-        if not row:
-            raise RuntimeError("Falha ao criar import_run.")
-        return dict(row)
+        if not ok:
+            return []
 
-
-def list_import_runs(db_path: str, portfolio_id: int) -> list[dict[str, Any]]:
-    with connect(db_path) as conn:
         rows = conn.execute(
             """
             SELECT id, portfolio_id, filename, created_at
@@ -233,15 +296,26 @@ def list_import_runs(db_path: str, portfolio_id: int) -> list[dict[str, Any]]:
         return [dict(r) for r in rows]
 
 
-def delete_portfolio(db_path: str, portfolio_id: int) -> None:
+def add_import_run(
+    db_path: str, user_id: int, portfolio_id: int, filename: str
+) -> dict[str, Any]:
+    now = _utc_now_iso()
     with connect(db_path) as conn:
-        conn.execute("DELETE FROM portfolio WHERE id = ?", (portfolio_id,))
-    # con = sqlite3.connect(db_path)
-    # try:
-    #     cur = con.cursor()
-    #     cur.execute("DELETE FROM positions WHERE portfolio_id = ?", (portfolio_id,))
-    #     cur.execute("DELETE FROM import_runs WHERE portfolio_id = ?", (portfolio_id,))
-    #     cur.execute("DELETE FROM portfolios WHERE id = ?", (portfolio_id,))
-    #     con.commit()
-    # finally:
-    #     con.close()
+        ok = conn.execute(
+            "SELECT 1 FROM portfolio WHERE id = ? AND user_id = ?",
+            (portfolio_id, user_id),
+        ).fetchone()
+        if not ok:
+            raise ValueError("Portfolio não encontrado.")
+
+        cur = conn.execute(
+            "INSERT INTO import_run (portfolio_id, filename, created_at) VALUES (?, ?, ?)",
+            (portfolio_id, filename, now),
+        )
+        rid = int(cur.lastrowid)
+        return {
+            "id": rid,
+            "portfolio_id": portfolio_id,
+            "filename": filename,
+            "created_at": now,
+        }
