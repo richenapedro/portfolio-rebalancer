@@ -29,6 +29,7 @@ from .errors import validation_error_handler, value_error_handler
 from .middleware import request_id_middleware
 from .routers.bd_remote import router as bd_remote_router
 from .routers.portfolio_db import router as portfolio_db_router
+from .routers.auth import router as auth_router
 from .schemas import (
     HoldingOut,
     JobCreateResponse,
@@ -52,6 +53,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan, title="portfolio-rebalancer API", version="0.1.0")
 
 app.include_router(bd_remote_router)
+app.include_router(auth_router)
 app.add_exception_handler(ValueError, value_error_handler)
 app.add_exception_handler(RequestValidationError, validation_error_handler)
 app.middleware("http")(request_id_middleware)

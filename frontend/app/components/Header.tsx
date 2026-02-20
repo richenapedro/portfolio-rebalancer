@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { LogOut, UserCircle2 } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
 import { useI18n } from "@/i18n/I18nProvider";
 import type { Lang } from "@/i18n/dictionaries";
+import { useAuth } from "../auth/AuthProvider";
 
 function NavLink(props: { href: string; label: string }) {
   const pathname = usePathname();
@@ -43,8 +45,9 @@ function LangButton(props: { lang: Lang; current: Lang; onClick: (l: Lang) => vo
 }
 
 export function Header() {
-  const isLoggedIn = false;
   const { t, lang, setLang } = useI18n();
+  const { user, loading, logout } = useAuth();
+  const isLoggedIn = !!user;
 
   return (
     <header className="sticky top-0 z-50 border-b border-[var(--border)] bg-[var(--surface)]/85 backdrop-blur">
@@ -87,9 +90,28 @@ export function Header() {
               <ThemeToggle />
             </>
           ) : (
-            <button className="text-sm font-medium rounded-lg border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2 text-[var(--text-primary)]">
-              Pedro ▾
-            </button>
+            <div className="flex items-center gap-2">
+              <div className="hidden sm:flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2">
+                <UserCircle2 className="h-4 w-4 text-[var(--text-muted)]" />
+                <span className="text-sm font-medium text-[var(--text-primary)]">
+                  {user?.email ?? ""}
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => void logout()}
+                disabled={loading}
+                className="inline-flex items-center gap-2 text-sm font-semibold rounded-lg border border-[var(--border)]
+                           bg-[var(--surface)] px-3 py-2 text-[var(--text-primary)] hover:bg-[var(--surface-alt)] transition
+                           disabled:opacity-60"
+              >
+                <LogOut className="h-4 w-4" />
+                {t("auth.logout")}
+              </button>
+
+              <ThemeToggle />
+            </div>
           )}
         </div>
       </div>

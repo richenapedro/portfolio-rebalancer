@@ -1,16 +1,17 @@
 # .../api/routers/portfolio_db.py
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
 from io import BytesIO
-from fastapi.responses import StreamingResponse
-import openpyxl  # type: ignore
 
-from ..settings import PORTFOLIO_DB_PATH
+import openpyxl  # type: ignore
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
+
 from ..db.sqlite_db import (
     add_import_run,
     create_portfolio,
+    delete_portfolio,
     get_portfolio,
     init_db,
     list_import_runs,
@@ -18,8 +19,9 @@ from ..db.sqlite_db import (
     list_positions,
     rename_portfolio,
     replace_positions,
-    delete_portfolio,
 )
+from ..services.auth import CurrentUser, get_current_user
+from ..settings import PORTFOLIO_DB_PATH
 
 router = APIRouter(prefix="/api/db", tags=["db"])
 
@@ -50,72 +52,76 @@ class ImportRunCreate(BaseModel):
 
 
 @router.get("/health")
-def health():
-    # garante init ok
+def health(user: CurrentUser = Depends(get_current_user)):
     init_db(PORTFOLIO_DB_PATH)
-    return {"ok": True, "db_path": PORTFOLIO_DB_PATH}
+    return {"ok": True, "db_path": PORTFOLIO_DB_PATH, "user_id": user.id}
 
 
 @router.get("/portfolios")
-def portfolios_list():
-    return {"items": list_portfolios(PORTFOLIO_DB_PATH)}
+def portfolios_list(user: CurrentUser = Depends(get_current_user)):
+    return {"items": list_portfolios(PORTFOLIO_DB_PATH, user.id)}
 
 
 @router.post("/portfolios")
-def portfolios_create(body: PortfolioCreate):
-    return create_portfolio(PORTFOLIO_DB_PATH, body.name)
+def portfolios_create(body: PortfolioCreate, user: CurrentUser = Depends(get_current_user)):
+    return create_portfolio(PORTFOLIO_DB_PATH, user.id, body.name)
 
 
 @router.get("/portfolios/{portfolio_id}")
-def portfolios_get(portfolio_id: int):
-    p = get_portfolio(PORTFOLIO_DB_PATH, portfolio_id)
+def portfolios_get(portfolio_id: int, user: CurrentUser = Depends(get_current_user)):
+    p = get_portfolio(PORTFOLIO_DB_PATH, user.id, portfolio_id)
     if not p:
         raise HTTPException(status_code=404, detail="Portfolio não encontrado.")
     return p
 
 
 @router.put("/portfolios/{portfolio_id}")
-def portfolios_rename(portfolio_id: int, body: PortfolioRename):
-    p = rename_portfolio(PORTFOLIO_DB_PATH, portfolio_id, body.name)
+def portfolios_rename(
+    portfolio_id: int, body: PortfolioRename, user: CurrentUser = Depends(get_current_user)
+):
+    p = rename_portfolio(PORTFOLIO_DB_PATH, user.id, portfolio_id, body.name)
     if not p:
         raise HTTPException(status_code=404, detail="Portfolio não encontrado.")
     return p
 
 
 @router.get("/portfolios/{portfolio_id}/positions")
-def positions_list(portfolio_id: int):
-    p = get_portfolio(PORTFOLIO_DB_PATH, portfolio_id)
+def positions_list(portfolio_id: int, user: CurrentUser = Depends(get_current_user)):
+    p = get_portfolio(PORTFOLIO_DB_PATH, user.id, portfolio_id)
     if not p:
         raise HTTPException(status_code=404, detail="Portfolio não encontrado.")
-    return {"items": list_positions(PORTFOLIO_DB_PATH, portfolio_id)}
+    return {"items": list_positions(PORTFOLIO_DB_PATH, user.id, portfolio_id)}
 
 
 @router.post("/portfolios/{portfolio_id}/positions/replace")
-def positions_replace(portfolio_id: int, body: ReplacePositionsBody):
-    p = get_portfolio(PORTFOLIO_DB_PATH, portfolio_id)
+def positions_replace(
+    portfolio_id: int, body: ReplacePositionsBody, user: CurrentUser = Depends(get_current_user)
+):
+    p = get_portfolio(PORTFOLIO_DB_PATH, user.id, portfolio_id)
     if not p:
         raise HTTPException(status_code=404, detail="Portfolio não encontrado.")
 
-    # transforma pydantic -> dict
     payload = [x.model_dump() for x in body.positions]
-    replace_positions(PORTFOLIO_DB_PATH, portfolio_id, payload)
+    replace_positions(PORTFOLIO_DB_PATH, user.id, portfolio_id, payload)
     return {"ok": True}
 
 
 @router.get("/portfolios/{portfolio_id}/import_runs")
-def import_runs_list(portfolio_id: int):
-    p = get_portfolio(PORTFOLIO_DB_PATH, portfolio_id)
+def import_runs_list(portfolio_id: int, user: CurrentUser = Depends(get_current_user)):
+    p = get_portfolio(PORTFOLIO_DB_PATH, user.id, portfolio_id)
     if not p:
         raise HTTPException(status_code=404, detail="Portfolio não encontrado.")
-    return {"items": list_import_runs(PORTFOLIO_DB_PATH, portfolio_id)}
+    return {"items": list_import_runs(PORTFOLIO_DB_PATH, user.id, portfolio_id)}
 
 
 @router.post("/portfolios/{portfolio_id}/import_runs")
-def import_runs_add(portfolio_id: int, body: ImportRunCreate):
-    p = get_portfolio(PORTFOLIO_DB_PATH, portfolio_id)
+def import_runs_add(
+    portfolio_id: int, body: ImportRunCreate, user: CurrentUser = Depends(get_current_user)
+):
+    p = get_portfolio(PORTFOLIO_DB_PATH, user.id, portfolio_id)
     if not p:
         raise HTTPException(status_code=404, detail="Portfolio não encontrado.")
-    return add_import_run(PORTFOLIO_DB_PATH, portfolio_id, body.filename)
+    return add_import_run(PORTFOLIO_DB_PATH, user.id, portfolio_id, body.filename)
 
 
 def _classify_db_row(ticker: str, cls: str | None) -> str:
@@ -129,7 +135,6 @@ def _classify_db_row(ticker: str, cls: str | None) -> str:
     if c in {"stocks", "stock", "acoes", "ação", "acoes"}:
         return "STOCK"
 
-    # fallback por ticker
     if t.endswith("11"):
         return "FII"
     if t.startswith("BRSTN"):
@@ -138,16 +143,14 @@ def _classify_db_row(ticker: str, cls: str | None) -> str:
 
 
 @router.get("/portfolios/{portfolio_id}/export_b3_xlsx")
-def export_b3_xlsx(portfolio_id: int):
-    p = get_portfolio(PORTFOLIO_DB_PATH, portfolio_id)
+def export_b3_xlsx(portfolio_id: int, user: CurrentUser = Depends(get_current_user)):
+    p = get_portfolio(PORTFOLIO_DB_PATH, user.id, portfolio_id)
     if not p:
         raise HTTPException(status_code=404, detail="Portfolio não encontrado.")
 
-    rows = list_positions(PORTFOLIO_DB_PATH, portfolio_id)
+    rows = list_positions(PORTFOLIO_DB_PATH, user.id, portfolio_id)
 
     wb = openpyxl.Workbook()
-
-    # remove sheet default
     default_ws = wb.active
     wb.remove(default_ws)
 
@@ -155,23 +158,8 @@ def export_b3_xlsx(portfolio_id: int):
     ws_fiis = wb.create_sheet("Fundo de Investimento")
     ws_td = wb.create_sheet("Tesouro Direto")
 
-    # Headers exatamente como o import_b3_xlsx espera:
-    ws_acoes.append(
-        [
-            "Código de Negociação",
-            "Quantidade",
-            "Preço de Fechamento",
-            "Valor Atualizado",
-        ]
-    )
-    ws_fiis.append(
-        [
-            "Código de Negociação",
-            "Quantidade",
-            "Preço de Fechamento",
-            "Valor Atualizado",
-        ]
-    )
+    ws_acoes.append(["Código de Negociação", "Quantidade", "Preço de Fechamento", "Valor Atualizado"])
+    ws_fiis.append(["Código de Negociação", "Quantidade", "Preço de Fechamento", "Valor Atualizado"])
     ws_td.append(["Código ISIN", "Quantidade", "Valor Atualizado"])
 
     for r in rows:
@@ -185,14 +173,13 @@ def export_b3_xlsx(portfolio_id: int):
 
         price = r.get("price")
         price_f = float(price) if price is not None else 0.0
-        value = qty * price_f  # valor atualizado
+        value = qty * price_f
 
         kind = _classify_db_row(ticker, r.get("cls"))
 
         if kind == "FII":
             ws_fiis.append([ticker, qty, price_f, value])
         elif kind == "BOND":
-            # Tesouro Direto no teu importer usa Código ISIN e Valor Atualizado
             ws_td.append([ticker, qty, value])
         else:
             ws_acoes.append([ticker, qty, price_f, value])
@@ -210,9 +197,9 @@ def export_b3_xlsx(portfolio_id: int):
 
 
 @router.delete("/portfolios/{portfolio_id}")
-def portfolios_delete(portfolio_id: int):
-    p = get_portfolio(PORTFOLIO_DB_PATH, portfolio_id)
+def portfolios_delete(portfolio_id: int, user: CurrentUser = Depends(get_current_user)):
+    p = get_portfolio(PORTFOLIO_DB_PATH, user.id, portfolio_id)
     if not p:
         raise HTTPException(status_code=404, detail="Portfolio não encontrado.")
-    delete_portfolio(PORTFOLIO_DB_PATH, portfolio_id)
+    delete_portfolio(PORTFOLIO_DB_PATH, user.id, portfolio_id)
     return {"ok": True}
