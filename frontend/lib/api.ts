@@ -350,7 +350,7 @@ async function jsonOrText(r: Response) {
 }
 
 export async function authMe(): Promise<MeResponse | null> {
-  const res = await fetch(`${BASE}/api/auth/me`, {
+  const res = await fetch(`${BASE}/api/app-auth/me`, {
     method: "GET",
     credentials: "include",
     cache: "no-store",
@@ -417,7 +417,7 @@ export type OAuthExchangePayload = {
 };
 
 export async function authOAuthExchange(payload: OAuthExchangePayload): Promise<MeResponse> {
-  const r = await fetch(`${BASE}/api/auth/oauth/exchange`, {
+  const r = await fetch(`${BASE}/api/app-auth/oauth/exchange`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     credentials: "include",
@@ -428,11 +428,12 @@ export async function authOAuthExchange(payload: OAuthExchangePayload): Promise<
     const txt = await r.text().catch(() => "");
     throw new Error(txt || `OAuth exchange failed (${r.status})`);
   }
+
   return (await r.json()) as MeResponse;
 }
 
 export async function authOauthExchange(provider: "google", idToken: string) {
-  const r = await fetch(`${BASE}/api/auth/oauth/exchange`, {
+  const r = await fetch(`${BASE}/api/app-auth/oauth/exchange`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
