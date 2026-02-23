@@ -130,7 +130,9 @@ def oauth_exchange(payload: OAuthExchangeIn, request: Request, response: Respons
             timeout=8,
         )
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"google tokeninfo error: {e}") from e
+        raise HTTPException(
+            status_code=502, detail=f"google tokeninfo error: {e}"
+        ) from e
 
     if r.status_code != 200:
         raise HTTPException(status_code=401, detail="invalid google token")
