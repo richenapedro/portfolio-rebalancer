@@ -342,21 +342,20 @@ async function jsonOrText(r: Response) {
 
 // find: export async function authMe(): Promise<MeResponse> {
 export async function authMe(): Promise<MeResponse | null> {
-  const r = await fetch(`${BASE}/api/auth/me`, {
+  const res = await fetch(`${BASE}/api/auth/me`, {
     method: "GET",
-    headers: { accept: "application/json" },
     credentials: "include",
     cache: "no-store",
   });
 
-  // ✅ deslogado -> não é erro
-  if (r.status === 401) return null;
+  if (res.status === 401) return null;
 
-  if (!r.ok) {
-    throw new Error(`me failed: ${r.status}`);
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(txt || `authMe failed (${res.status})`);
   }
 
-  return (await r.json()) as MeResponse;
+  return (await res.json()) as MeResponse;
 }
 
 export async function authLogin(email: string, password: string): Promise<MeResponse> {
@@ -396,4 +395,41 @@ export async function authLogout(): Promise<void> {
   if (!r.ok) {
     throw new Error(`logout failed: ${r.status}`);
   }
+}
+
+export type OAuthExchangePayload = {
+  provider: "google" | "facebook";
+  id_token?: string;
+  access_token?: string;
+};
+
+export async function authOAuthExchange(payload: OAuthExchangePayload): Promise<MeResponse> {
+  const r = await fetch(`${BASE}/api/auth/oauth/exchange`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+
+  if (!r.ok) {
+    const txt = await r.text().catch(() => "");
+    throw new Error(txt || `OAuth exchange failed (${r.status})`);
+  }
+  return (await r.json()) as MeResponse;
+}
+
+export async function authOauthExchange(provider: "google", idToken: string) {
+  const r = await fetch(`${BASE}/api/auth/oauth/exchange`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ provider, id_token: idToken }),
+  });
+
+  if (!r.ok) {
+    const txt = await r.text().catch(() => "");
+    throw new Error(txt || `oauth exchange failed (${r.status})`);
+  }
+
+  return (await r.json()) as { id: number; email: string };
 }
