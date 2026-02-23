@@ -1,0 +1,76 @@
+services:
+  backend:
+    build:
+      context: /opt/portfolio-rebalancer/app
+      dockerfile: src/Dockerfile
+    container_name: pr-backend
+    restart: unless-stopped
+    environment:
+      - PORTFOLIO_DB_PATH=/data/portfolio.db
+    volumes:
+      - /opt/portfolio-rebalancer/data:/data
+    networks:
+      - n8n_default
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=n8n_default
+      - traefik.http.routers.pr_api.rule=Host(`app.76.13.0.33.nip.io`) && PathPrefix(`/api`)
+      - traefik.http.routers.pr_api.entrypoints=websecure
+      - traefik.http.routers.pr_api.tls=true
+      - traefik.http.routers.pr_api.priority=100
+      - traefik.http.services.pr_api.loadbalancer.server.port=8000
+      - traefik.http.routers.pr_api.tls.certresolver=mytlschallenge
+      - traefik.http.routers.pr_api.tls.domains[0].main=app.76.13.0.33.nip.io
+      - traefik.http.routers.pr_api_docs.rule=Host(`app.76.13.0.33.nip.io`) && (PathPrefix(`/api/docs`) || Path(`/api/openapi.json`) || PathPrefix(`/api/redoc`))
+      - traefik.http.routers.pr_api_docs.entrypoints=websecure
+      - traefik.http.routers.pr_api_docs.priority=200
+      - traefik.http.routers.pr_api_docs.middlewares=pr_api_docs_auth
+      - traefik.http.routers.pr_api_docs.service=pr_api
+      - traefik.http.routers.pr_api_docs.tls=true
+      - "traefik.http.middlewares.pr_api_docs_auth.basicauth.users=prichena:$$2y$$05$$5598lY3S6F30Euavs8fnM.0H2Sh8bi0Okm1JUzUMMIg5eq4GTE4oS"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; s=socket.socket(); s.settimeout(2); exit(s.connect_ex(('127.0.0.1',8000)))\""]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  frontend:
+    build:
+      context: /opt/portfolio-rebalancer/app/frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ""
+    container_name: pr-frontend
+    env_file:
+      - /opt/portfolio-rebalancer/.env.frontend
+    restart: unless-stopped
+    environment:
+      - NEXT_PUBLIC_API_BASE_URL=
+    networks:
+      - n8n_default
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=n8n_default
+      - traefik.http.routers.prrb_app.rule=Host(`app.76.13.0.33.nip.io`) && PathPrefix(`/`)
+      - traefik.http.routers.prrb_app.entrypoints=websecure
+      - traefik.http.routers.prrb_app.tls=true
+      - traefik.http.routers.prrb_app.priority=10
+      - traefik.http.services.prrb_app.loadbalancer.server.port=3000
+      - traefik.http.routers.prrb_app.tls.certresolver=mytlschallenge
+      - traefik.http.routers.prrb_app.tls.domains[0].main=app.76.13.0.33.nip.io
+      - traefik.http.routers.prrb_nextauth.rule=Host(`app.76.13.0.33.nip.io`) && PathPrefix(`/api/auth`)
+      - traefik.http.routers.prrb_nextauth.entrypoints=websecure
+      - traefik.http.routers.prrb_nextauth.tls=true
+      - traefik.http.routers.prrb_nextauth.priority=300
+      - traefik.http.routers.prrb_nextauth.service=prrb_app
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:3000',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    depends_on:
+      backend:
+        condition: service_healthy
+networks:
+  n8n_default:
+    external: true
