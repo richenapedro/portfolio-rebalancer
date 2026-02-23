@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+import requests
 import re
 import requests
 
@@ -116,6 +116,7 @@ def oauth_exchange(payload: OAuthExchangeIn, request: Request, response: Respons
     init_db(PORTFOLIO_DB_PATH)
 
     provider = (payload.provider or "").strip().lower()
+
     if provider != "google":
         raise HTTPException(status_code=400, detail="invalid provider")
 
@@ -142,6 +143,11 @@ def oauth_exchange(payload: OAuthExchangeIn, request: Request, response: Respons
     if not email:
         raise HTTPException(status_code=401, detail="google token missing email")
 
+    # (opcional, mas recomendado) confere se o token é do seu app:
+    # aud = str(data.get("aud") or "")
+    # if aud != os.environ.get("GOOGLE_CLIENT_ID"):
+    #     raise HTTPException(status_code=401, detail="invalid aud")
+
     # cria/pega usuário
     existing = get_user_by_email(PORTFOLIO_DB_PATH, email)
     if existing:
@@ -155,3 +161,20 @@ def oauth_exchange(payload: OAuthExchangeIn, request: Request, response: Respons
     _set_session_cookie(request, response, token)
 
     return {"id": int(u["id"]), "email": str(u["email"])}
+    provider = (payload.provider or "").strip().lower()
+
+    if provider == "google":
+        if not payload.id_token:
+            raise HTTPException(status_code=400, detail="missing id_token")
+        # TODO: validar id_token e extrair email/sub
+        # e então criar/obter user e SETAR COOKIE/SESSION igual seu login normal
+        # return me()
+
+    if provider == "facebook":
+        if not payload.access_token:
+            raise HTTPException(status_code=400, detail="missing access_token")
+        # TODO: validar access_token, pegar email/id
+        # criar/obter user e setar cookie/session igual login
+        # return me()
+
+    raise HTTPException(status_code=400, detail="invalid provider")
