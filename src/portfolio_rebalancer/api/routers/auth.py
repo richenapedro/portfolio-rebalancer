@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+import requests
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -102,3 +102,78 @@ def _set_session_cookie(request: Request, response: Response, token: str) -> Non
         path="/",
         max_age=14 * 24 * 60 * 60,
     )
+
+
+class OAuthExchangeIn(BaseModel):
+    provider: str
+    id_token: str | None = None
+    access_token: str | None = None
+
+
+@router.post("/oauth/exchange")
+def oauth_exchange(payload: OAuthExchangeIn, request: Request, response: Response):
+    init_db(PORTFOLIO_DB_PATH)
+
+    provider = (payload.provider or "").strip().lower()
+
+    if provider != "google":
+        raise HTTPException(status_code=400, detail="invalid provider")
+
+    if not payload.id_token:
+        raise HTTPException(status_code=400, detail="missing id_token")
+
+    # valida id_token no Google
+    try:
+        r = requests.get(
+            "https://oauth2.googleapis.com/tokeninfo",
+            params={"id_token": payload.id_token},
+            timeout=8,
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=502, detail=f"google tokeninfo error: {e}"
+        ) from e
+
+    if r.status_code != 200:
+        raise HTTPException(status_code=401, detail="invalid google token")
+
+    data = r.json()
+    email = str(data.get("email") or "").strip().lower()
+    if not email:
+        raise HTTPException(status_code=401, detail="google token missing email")
+
+    # (opcional, mas recomendado) confere se o token é do seu app:
+    # aud = str(data.get("aud") or "")
+    # if aud != os.environ.get("GOOGLE_CLIENT_ID"):
+    #     raise HTTPException(status_code=401, detail="invalid aud")
+
+    # cria/pega usuário
+    existing = get_user_by_email(PORTFOLIO_DB_PATH, email)
+    if existing:
+        u = existing
+    else:
+        # cria com senha aleatória (não será usada)
+        password_hash = hash_password("oauth:" + str(data.get("sub") or ""))
+        u = create_user(PORTFOLIO_DB_PATH, email, password_hash)
+
+    token = create_session_token(int(u["id"]), str(u["email"]))
+    _set_session_cookie(request, response, token)
+
+    return {"id": int(u["id"]), "email": str(u["email"])}
+    provider = (payload.provider or "").strip().lower()
+
+    if provider == "google":
+        if not payload.id_token:
+            raise HTTPException(status_code=400, detail="missing id_token")
+        # TODO: validar id_token e extrair email/sub
+        # e então criar/obter user e SETAR COOKIE/SESSION igual seu login normal
+        # return me()
+
+    if provider == "facebook":
+        if not payload.access_token:
+            raise HTTPException(status_code=400, detail="missing access_token")
+        # TODO: validar access_token, pegar email/id
+        # criar/obter user e setar cookie/session igual login
+        # return me()
+
+    raise HTTPException(status_code=400, detail="invalid provider")
