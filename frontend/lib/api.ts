@@ -65,7 +65,6 @@ export type JobStatusResponse = {
   request_id: string;
 };
 
-
 export type RebalanceResult = {
   summary: {
     cash_before: number;
@@ -97,7 +96,6 @@ export async function createRebalanceB3Job(params: {
   weights: AllocationWeights;
   notesByTicker?: Record<string, number>; // ✅ novo
 }): Promise<JobCreateResponse> {
-
   const form = new FormData();
   form.append("file", params.file);
 
@@ -108,6 +106,7 @@ export async function createRebalanceB3Job(params: {
   form.append("w_stock", String(params.weights.stocks));
   form.append("w_fii", String(params.weights.fiis));
   form.append("w_bond", String(params.weights.bonds));
+
   // ✅ notes_json: dict { TICKER: note }
   if (params.notesByTicker && Object.keys(params.notesByTicker).length > 0) {
     form.append("notes_json", JSON.stringify(params.notesByTicker));
@@ -169,7 +168,10 @@ export type ImportResponse = {
   };
 };
 
-export async function importB3(params: { file: File; noTesouro: boolean }): Promise<ImportResponse> {
+export async function importB3(params: {
+  file: File;
+  noTesouro: boolean;
+}): Promise<ImportResponse> {
   const form = new FormData();
   form.append("file", params.file);
   form.append("no_tesouro", String(params.noTesouro));
@@ -206,7 +208,9 @@ export async function searchSymbols(q: string, limit = 8): Promise<string[]> {
   return (await r.json()) as string[];
 }
 
-export async function getRemotePrices(tickers: string[]): Promise<Record<string, number | null>> {
+export async function getRemotePrices(
+  tickers: string[],
+): Promise<Record<string, number | null>> {
   const url = new URL("/api/bd_remote/prices", BASE);
   url.searchParams.set("tickers", tickers.join(","));
 
@@ -277,7 +281,9 @@ type CreatePortfolioResponse = {
   created_at: string;
 };
 
-export async function savePortfolio(payload: SavePortfolioPayload): Promise<SavePortfolioResponse> {
+export async function savePortfolio(
+  payload: SavePortfolioPayload,
+): Promise<SavePortfolioResponse> {
   // 1) cria portfolio
   const r1 = await fetch(`${BASE}/api/db/portfolios`, {
     method: "POST",
@@ -294,12 +300,15 @@ export async function savePortfolio(payload: SavePortfolioPayload): Promise<Save
   const created = (await r1.json()) as CreatePortfolioResponse;
 
   // 2) replace positions
-  const r2 = await fetch(`${BASE}/api/db/portfolios/${created.id}/positions/replace`, {
-    method: "POST",
-    headers: { "content-type": "application/json", accept: "application/json" },
-    body: JSON.stringify({ positions: payload.positions }),
-    credentials: "include",
-  });
+  const r2 = await fetch(
+    `${BASE}/api/db/portfolios/${created.id}/positions/replace`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify({ positions: payload.positions }),
+      credentials: "include",
+    },
+  );
 
   if (!r2.ok) {
     const txt = await r2.text();
@@ -325,7 +334,7 @@ export async function savePortfolio(payload: SavePortfolioPayload): Promise<Save
 }
 
 /** =======================
- * Auth
+ * Auth (FastAPI) — ✅ Opção A: /api/app-auth/*
  * ======================= */
 
 export type MeResponse = {
@@ -340,9 +349,8 @@ async function jsonOrText(r: Response) {
   return await r.text();
 }
 
-// find: export async function authMe(): Promise<MeResponse> {
 export async function authMe(): Promise<MeResponse | null> {
-  const res = await fetch(`${BASE}/api/auth/me`, {
+  const res = await fetch(`${BASE}/api/app-auth/me`, {
     method: "GET",
     credentials: "include",
     cache: "no-store",
@@ -359,39 +367,44 @@ export async function authMe(): Promise<MeResponse | null> {
 }
 
 export async function authLogin(email: string, password: string): Promise<MeResponse> {
-  const r = await fetch(`${BASE}/api/auth/login`, {
+  const r = await fetch(`${BASE}/api/app-auth/login`, {
     method: "POST",
     headers: { "content-type": "application/json", accept: "application/json" },
     body: JSON.stringify({ email, password }),
     credentials: "include",
   });
+
   if (!r.ok) {
     const detail = await jsonOrText(r);
     throw new Error(typeof detail === "string" ? detail : `login failed: ${r.status}`);
   }
+
   return (await r.json()) as MeResponse;
 }
 
 export async function authSignup(email: string, password: string): Promise<MeResponse> {
-  const r = await fetch(`${BASE}/api/auth/signup`, {
+  const r = await fetch(`${BASE}/api/app-auth/signup`, {
     method: "POST",
     headers: { "content-type": "application/json", accept: "application/json" },
     body: JSON.stringify({ email, password }),
     credentials: "include",
   });
+
   if (!r.ok) {
     const detail = await jsonOrText(r);
     throw new Error(typeof detail === "string" ? detail : `signup failed: ${r.status}`);
   }
+
   return (await r.json()) as MeResponse;
 }
 
 export async function authLogout(): Promise<void> {
-  const r = await fetch(`${BASE}/api/auth/logout`, {
+  const r = await fetch(`${BASE}/api/app-auth/logout`, {
     method: "POST",
     headers: { accept: "application/json" },
     credentials: "include",
   });
+
   if (!r.ok) {
     throw new Error(`logout failed: ${r.status}`);
   }
@@ -404,7 +417,7 @@ export type OAuthExchangePayload = {
 };
 
 export async function authOAuthExchange(payload: OAuthExchangePayload): Promise<MeResponse> {
-  const r = await fetch(`${BASE}/api/auth/oauth/exchange`, {
+  const r = await fetch(`${BASE}/api/app-auth/oauth/exchange`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     credentials: "include",
@@ -415,11 +428,12 @@ export async function authOAuthExchange(payload: OAuthExchangePayload): Promise<
     const txt = await r.text().catch(() => "");
     throw new Error(txt || `OAuth exchange failed (${r.status})`);
   }
+
   return (await r.json()) as MeResponse;
 }
 
 export async function authOauthExchange(provider: "google", idToken: string) {
-  const r = await fetch(`${BASE}/api/auth/oauth/exchange`, {
+  const r = await fetch(`${BASE}/api/app-auth/oauth/exchange`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
