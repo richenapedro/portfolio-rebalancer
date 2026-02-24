@@ -56,16 +56,21 @@ export function AuthProvider(props: { children: React.ReactNode }) {
       // 2) Fallback: if NextAuth has an OAuth session, bridge to backend cookie session
       const s = session as unknown as OAuthSession | null;
 
-      if (
-        s?.provider === "google" &&
-        typeof s.id_token === "string" &&
-        s.id_token
-      ) {
-        await authOauthExchange("google", s.id_token);
+      if (s?.provider === "google" && typeof s.id_token === "string" && s.id_token) {
+        await authOauthExchange({ provider: "google", id_token: s.id_token });
         const me2 = await authMe();
         setUser(me2 ?? null);
         return;
       }
+
+      if (s?.provider === "facebook" && typeof s.access_token === "string" && s.access_token) {
+        await authOauthExchange({ provider: "facebook", access_token: s.access_token });
+        const me2 = await authMe();
+        setUser(me2 ?? null);
+        return;
+      }
+
+      setUser(null);
 
       // Facebook not enabled for now
       setUser(null);

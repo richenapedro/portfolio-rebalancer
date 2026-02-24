@@ -16,6 +16,10 @@ from ..services.auth import (
     verify_password,
 )
 from ..settings import PORTFOLIO_DB_PATH
+import os
+
+FACEBOOK_APP_ID = os.getenv("FACEBOOK_APP_ID", "")
+FACEBOOK_APP_SECRET = os.getenv("FACEBOOK_APP_SECRET", "")
 
 # ✅ Opção A: NÃO usar /api/auth (conflita com NextAuth)
 router = APIRouter(prefix="/api/app-auth", tags=["auth"])
@@ -116,7 +120,7 @@ def oauth_exchange(payload: OAuthExchangeIn, request: Request, response: Respons
     init_db(PORTFOLIO_DB_PATH)
 
     provider = (payload.provider or "").strip().lower()
-    if provider != "google":
+    if provider not in ("google", "facebook"):
         raise HTTPException(status_code=400, detail="invalid provider")
 
     if not payload.id_token:

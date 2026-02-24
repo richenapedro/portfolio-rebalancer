@@ -7,6 +7,8 @@ services:
     restart: unless-stopped
     environment:
       - PORTFOLIO_DB_PATH=/data/portfolio.db
+      - FACEBOOK_APP_ID=SEU_FACEBOOK_APP_ID
+      - FACEBOOK_APP_SECRET=SEU_FACEBOOK_APP_SECRET
     volumes:
       - /opt/portfolio-rebalancer/data:/data
     networks:

@@ -75,8 +75,9 @@ function Field(props: {
 }
 
 type OAuthSession = {
-  provider?: "google";
+  provider?: "google" | "facebook";
   id_token?: string;
+  access_token?: string;
 };
 
 export default function LoginPage() {
@@ -121,12 +122,20 @@ export default function LoginPage() {
   }
 
   // ✅ Bridge: NextAuth (Google) -> FastAPI cookie session -> redirect pro next
+  // ✅ Bridge: NextAuth (Google/Facebook) -> FastAPI cookie session -> redirect pro next
   useEffect(() => {
     if (status !== "authenticated") return;
 
     const s = session as unknown as OAuthSession | null;
-    if (s?.provider !== "google") return;
-    if (typeof s.id_token !== "string" || !s.id_token) return;
+
+    const payload =
+      s?.provider === "google" && typeof s.id_token === "string" && s.id_token
+        ? { provider: "google" as const, id_token: s.id_token }
+        : s?.provider === "facebook" && typeof s.access_token === "string" && s.access_token
+          ? { provider: "facebook" as const, access_token: s.access_token }
+          : null;
+
+    if (!payload) return;
 
     let cancelled = false;
 
@@ -135,11 +144,8 @@ export default function LoginPage() {
         setBusy(true);
         setError(null);
 
-        const idToken = s?.id_token;
-        if (typeof idToken !== "string" || !idToken) return;
-
-        await authOauthExchange("google", idToken);
-        await refresh(); // agora /api/auth/me deve virar 200 e preencher o user
+        await authOauthExchange(payload);
+        await refresh();
 
         if (!cancelled) router.replace(nextUrl);
       } catch (e: unknown) {
@@ -238,16 +244,17 @@ export default function LoginPage() {
               Entrar com Google
             </button>
 
-            <button
-              type="button"
-              onClick={() => alert("Em breve")}
-              className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--border)]
-                         bg-[var(--surface)] px-4 py-3 text-sm font-semibold text-[var(--text-primary)]
-                         hover:bg-[var(--surface-alt)] transition"
-            >
-              <FacebookIcon className="h-5 w-5" />
-              Entrar com Facebook
-            </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => signIn("facebook", { callbackUrl: oauthCallbackUrl })}
+            className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--border)]
+                      bg-[var(--surface)] px-4 py-3 text-sm font-semibold text-[var(--text-primary)]
+                      hover:bg-[var(--surface-alt)] transition disabled:opacity-60"
+          >
+            <FacebookIcon className="h-5 w-5" />
+            Entrar com Facebook
+          </button>
           </div>
 
           <div className="text-sm text-[var(--text-muted)]">

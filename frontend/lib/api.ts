@@ -416,7 +416,7 @@ export type OAuthExchangePayload = {
   access_token?: string;
 };
 
-export async function authOAuthExchange(payload: OAuthExchangePayload): Promise<MeResponse> {
+export async function authOauthExchange(payload: OAuthExchangePayload): Promise<MeResponse> {
   const r = await fetch(`${BASE}/api/app-auth/oauth/exchange`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -432,18 +432,18 @@ export async function authOAuthExchange(payload: OAuthExchangePayload): Promise<
   return (await r.json()) as MeResponse;
 }
 
-export async function authOauthExchange(provider: "google", idToken: string) {
-  const r = await fetch(`${BASE}/api/app-auth/oauth/exchange`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ provider, id_token: idToken }),
-  });
+// export async function authOauthExchange(provider: "google", idToken: string) {
+//   const r = await fetch(`${BASE}/api/app-auth/oauth/exchange`, {
+//     method: "POST",
+//     headers: { "Content-Type": "application/json" },
+//     credentials: "include",
+//     body: JSON.stringify({ provider, id_token: idToken }),
+//   });
 
-  if (!r.ok) {
-    const txt = await r.text().catch(() => "");
-    throw new Error(txt || `oauth exchange failed (${r.status})`);
-  }
+//   if (!r.ok) {
+//     const txt = await r.text().catch(() => "");
+//     throw new Error(txt || `oauth exchange failed (${r.status})`);
+//   }
 
-  return (await r.json()) as { id: number; email: string };
-}
+//   return (await r.json()) as { id: number; email: string };
+// }
